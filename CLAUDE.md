@@ -60,9 +60,20 @@ opsmanager/
 - [ ] Additional services from Go SDK (see `opsmngr.go` lines 88-129)
 
 ### Testing
-- No live Ops Manager currently available for testing
-- Validation approach: `tests/validate_against_mongocli.py` compares output against mongocli (Go SDK)
+- **Live tests**: `tests/test_live.py` - comprehensive integration tests (all 9 tests pass)
+- **mongocli validation**: `tests/validate_against_mongocli.py` - compares output against mongocli (Go SDK)
 - All Python files pass syntax check (`python -m py_compile`)
+
+**Last tested**: 2025-11-26 against Ops Manager at `http://98.91.236.168:8081`
+- Organizations: ✓
+- Projects: ✓
+- Clusters: ✓
+- Hosts: ✓ (3-node replica set)
+- Measurements: ✓ (133 types, 125 with data)
+- Databases: ✓
+- Alerts: ✓
+- Performance Advisor: ✓ (gracefully handles unavailability)
+- Raw dict mode: ✓
 
 ## Usage Example
 
@@ -92,6 +103,10 @@ client.close()
 ## Development Commands
 
 ```bash
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
 # Install in development mode
 pip install -e .
 
@@ -101,10 +116,13 @@ pip install -e ".[dev]"
 # Syntax check all files
 python -m py_compile opsmanager/*.py opsmanager/services/*.py
 
-# Run validation against mongocli (requires Ops Manager access)
-export OM_BASE_URL="https://ops-manager.example.com"
+# Run live integration tests (requires Ops Manager access)
+export OM_BASE_URL="http://ops-manager:8081"
 export OM_PUBLIC_KEY="your-key"
 export OM_PRIVATE_KEY="your-key"
+python tests/test_live.py --verbose
+
+# Run validation against mongocli (requires mongocli installed)
 export OM_PROJECT_ID="your-project"
 python tests/validate_against_mongocli.py
 ```
