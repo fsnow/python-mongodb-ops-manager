@@ -4,7 +4,7 @@ Python client library for MongoDB Ops Manager API
 
 ## Status
 
-🚧 **Alpha** - Core functionality implemented, testing in progress
+**Beta** - Core functionality implemented and tested against live Ops Manager
 
 ## Overview
 
@@ -16,6 +16,7 @@ A production-quality Python client library for the MongoDB Ops Manager API, desi
 - **Type-safe** - Full type hints throughout with dataclass models
 - **Pythonic** - Clean, idiomatic Python API design
 - **Safe by default** - Conservative rate limiting to protect production Ops Manager instances
+- **Tested** - Validated against live Ops Manager and cross-checked with mongocli (Go SDK)
 
 ## Installation
 
@@ -147,6 +148,31 @@ print(hosts[0].hostname)  # IDE autocomplete works
 # Return raw dictionaries
 hosts = client.deployments.list_hosts(project_id="abc123", as_obj=False)
 print(hosts[0]["hostname"])
+```
+
+## Testing
+
+### Live Integration Tests
+
+Run the integration test suite against a live Ops Manager instance:
+
+```bash
+export OM_BASE_URL="http://ops-manager.example.com:8081"
+export OM_PUBLIC_KEY="your-public-key"
+export OM_PRIVATE_KEY="your-private-key"
+
+python tests/test_live.py --verbose
+```
+
+### Validation Against mongocli
+
+Compare output against the official MongoDB CLI (uses the Go SDK):
+
+```bash
+export OM_ORG_ID="your-org-id"
+export OM_PROJECT_ID="your-project-id"
+
+python tests/validate_against_mongocli.py
 ```
 
 ## Design Principles
