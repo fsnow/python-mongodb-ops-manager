@@ -5,7 +5,8 @@
 **python-mongodb-ops-manager** (`opsmanager`) is a Python client library for the MongoDB Ops Manager API.
 
 ### Purpose
-Enable automated health checks, metrics collection, and fleet management for MongoDB deployments managed by Ops Manager. This supports the automation plan defined in `~/Projects/WFRCE/AUTOMATION_PLAN.md`.
+
+Enable automated health checks, metrics collection, and fleet management for MongoDB deployments managed by Ops Manager.
 
 ### Design Decisions
 - **Architecture**: Service-oriented, modeled after the official [Go SDK](https://github.com/mongodb/go-client-mongodb-ops-manager)
@@ -42,6 +43,8 @@ opsmanager/
 ```
 
 ## Current Status
+
+**Published to PyPI**: https://pypi.org/project/opsmanager/
 
 ### Implemented
 - [x] Core client with rate limiting and retries
@@ -129,12 +132,67 @@ python tests/validate_against_mongocli.py
 
 ## Related Projects
 
-- **AUTOMATION_PLAN.md**: `~/Projects/WFRCE/AUTOMATION_PLAN.md` - defines export scripts that will use this library
-- **Export scripts**: To be built in this repo or separately, using this library
+- **AUTOMATION_PLAN.md**: Defined elsewhere - describes health check export scripts that use this library
+
+## Publishing a New Version to PyPI
+
+### Steps
+
+1. **Update version** in `opsmanager/__init__.py` and `pyproject.toml`
+   ```python
+   __version__ = "0.2.0"  # in __init__.py
+   ```
+   ```toml
+   version = "0.2.0"  # in pyproject.toml
+   ```
+
+2. **Test the changes**
+   ```bash
+   source .venv/bin/activate
+   python tests/test_live.py --verbose
+   ```
+
+3. **Build the package**
+   ```bash
+   pip install build twine
+   rm -rf dist/ build/ *.egg-info
+   python -m build
+   twine check dist/*
+   ```
+
+4. **Upload to PyPI**
+   ```bash
+   twine upload dist/*
+   ```
+   - Username: `__token__`
+   - Password: PyPI API token (get from https://pypi.org/manage/account/token/)
+
+5. **Tag and push**
+   ```bash
+   git add -A
+   git commit -m "Release vX.Y.Z"
+   git tag -a vX.Y.Z -m "Release vX.Y.Z"
+   git push && git push --tags
+   ```
+
+### Version Numbering
+
+- **Patch** (0.1.1): Bug fixes, no API changes
+- **Minor** (0.2.0): New features, backward compatible
+- **Major** (1.0.0): Breaking API changes
+
+### TestPyPI (Optional)
+
+To test before real release:
+```bash
+twine upload --repository testpypi dist/*
+pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ opsmanager
+```
 
 ## Notes
 
 - Copyright: Frank Snow (independent project, not MongoDB)
 - License: Apache 2.0
-- Python: 3.9+
+- Python: 3.9 - 3.14
 - Dependencies: `requests` only
+- PyPI: https://pypi.org/project/opsmanager/
