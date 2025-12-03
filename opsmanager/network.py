@@ -42,26 +42,35 @@ logger = logging.getLogger(__name__)
 
 
 class RateLimiter:
-    """Thread-safe rate limiter using token bucket algorithm.
+    """Thread-safe rate limiter enforcing strict request spacing.
 
     This is critical for protecting production Ops Manager instances
     from being overwhelmed by API requests.
 
+    By default (burst=1), this enforces strict spacing between requests.
+    For example, with rate=2.0, requests are spaced at least 500ms apart,
+    ensuring the rate limit is never violated at any time scale.
+
+    With burst > 1, the traditional token bucket algorithm is used,
+    allowing short bursts before throttling.
+
     Attributes:
         rate: Maximum requests per second.
-        burst: Maximum burst size (tokens that can accumulate).
+        burst: Maximum burst size (1 = strict spacing, >1 = token bucket).
     """
 
-    def __init__(self, rate: float = 2.0, burst: int = 5):
+    def __init__(self, rate: float = 2.0, burst: int = 1):
         """Initialize the rate limiter.
 
         Args:
             rate: Maximum requests per second. Default is 2 (conservative).
-            burst: Maximum burst size. Default is 5.
+            burst: Maximum burst size. Default is 1 (strict spacing).
+                Set to higher values to allow short bursts of requests.
         """
         self.rate = rate
         self.burst = burst
         self._tokens = float(burst)
+        self._last_request: Optional[float] = None
         self._last_update = time.monotonic()
         self._lock = Lock()
 
@@ -76,30 +85,49 @@ class RateLimiter:
             True if token was acquired, False if timeout occurred.
         """
         start_time = time.monotonic()
+        min_interval = 1.0 / self.rate
 
         while True:
+            # Determine how long to wait (if any)
+            wait_time = 0.0
             with self._lock:
                 now = time.monotonic()
-                # Add tokens based on time passed
-                elapsed = now - self._last_update
-                self._tokens = min(self.burst, self._tokens + elapsed * self.rate)
-                self._last_update = now
 
-                if self._tokens >= 1.0:
-                    self._tokens -= 1.0
-                    return True
+                if self.burst == 1:
+                    # Strict mode: enforce minimum interval between requests
+                    if self._last_request is not None:
+                        elapsed_since_last = now - self._last_request
+                        if elapsed_since_last < min_interval:
+                            wait_time = min_interval - elapsed_since_last
+                        else:
+                            # Enough time has passed, acquire immediately
+                            self._last_request = now
+                            return True
+                    else:
+                        # First request, no waiting needed
+                        self._last_request = now
+                        return True
+                else:
+                    # Token bucket mode for burst > 1
+                    elapsed = now - self._last_update
+                    self._tokens = min(self.burst, self._tokens + elapsed * self.rate)
+                    self._last_update = now
 
-                # Calculate wait time for next token
-                wait_time = (1.0 - self._tokens) / self.rate
+                    if self._tokens >= 1.0:
+                        self._tokens -= 1.0
+                        return True
 
-            # Check timeout
+                    # Calculate wait time for next token
+                    wait_time = (1.0 - self._tokens) / self.rate
+
+            # Check timeout before sleeping
             if timeout is not None:
                 elapsed_total = time.monotonic() - start_time
                 if elapsed_total + wait_time > timeout:
                     return False
 
-            # Wait for token to become available
-            time.sleep(min(wait_time, 0.1))  # Check at least every 100ms
+            # Sleep outside the lock
+            time.sleep(wait_time)
 
     def set_rate(self, rate: float) -> None:
         """Update the rate limit.
@@ -126,12 +154,15 @@ class NetworkSession:
     DEFAULT_RETRY_COUNT = 3
     DEFAULT_RETRY_BACKOFF = 1.0  # seconds
 
+    DEFAULT_RATE_BURST = 1  # no bursting by default
+
     def __init__(
         self,
         base_url: str,
         auth: AuthBase,
         timeout: float = DEFAULT_TIMEOUT,
         rate_limit: float = DEFAULT_RATE_LIMIT,
+        rate_burst: int = DEFAULT_RATE_BURST,
         retry_count: int = DEFAULT_RETRY_COUNT,
         retry_backoff: float = DEFAULT_RETRY_BACKOFF,
         verify_ssl: bool = True,
@@ -144,6 +175,8 @@ class NetworkSession:
             auth: Authentication handler (typically OpsManagerAuth).
             timeout: Request timeout in seconds.
             rate_limit: Maximum requests per second.
+            rate_burst: Maximum burst size (default 1 = no bursting).
+                Set to higher values to allow short bursts of requests.
             retry_count: Number of retries for failed requests.
             retry_backoff: Base backoff time between retries.
             verify_ssl: Whether to verify SSL certificates.
@@ -165,7 +198,7 @@ class NetworkSession:
         })
 
         # Initialize rate limiter
-        self._rate_limiter = RateLimiter(rate=rate_limit, burst=5)
+        self._rate_limiter = RateLimiter(rate=rate_limit, burst=rate_burst)
 
         # Request/response callbacks
         self._on_request: Optional[Callable] = None
@@ -224,10 +257,6 @@ class NetworkSession:
         url = urljoin(self.base_url + "/", path.lstrip("/"))
         request_timeout = timeout or self.timeout
 
-        # Invoke pre-request callback
-        if self._on_request:
-            self._on_request(method, url, {"params": params, "json": json})
-
         last_exception: Optional[Exception] = None
 
         for attempt in range(self.retry_count + 1):
@@ -237,6 +266,11 @@ class NetworkSession:
                     message="Rate limit acquisition timed out",
                     detail=f"Could not acquire rate limit token within {request_timeout}s",
                 )
+
+            # Invoke pre-request callback AFTER rate limiting
+            # This ensures accurate timing for monitoring actual request spacing
+            if self._on_request:
+                self._on_request(method, url, {"params": params, "json": json})
 
             try:
                 logger.debug(

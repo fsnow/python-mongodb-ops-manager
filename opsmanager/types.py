@@ -176,6 +176,7 @@ class Host:
     logs_enabled: Optional[bool] = None
     profiler_enabled: Optional[bool] = None
     ssl_enabled: Optional[bool] = None
+    auth_mechanism_name: Optional[str] = None
     journaling_enabled: bool = True
     hidden: bool = False
     hidden_secondary: bool = False
@@ -209,6 +210,7 @@ class Host:
             logs_enabled=data.get("logsEnabled"),
             profiler_enabled=data.get("profilerEnabled"),
             ssl_enabled=data.get("sslEnabled"),
+            auth_mechanism_name=data.get("authMechanismName"),
             journaling_enabled=data.get("journalingEnabled", True),
             hidden=data.get("hidden", False),
             hidden_secondary=data.get("hiddenSecondary", False),

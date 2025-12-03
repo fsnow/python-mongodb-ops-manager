@@ -83,6 +83,7 @@ class OpsManagerClient:
         private_key: str,
         timeout: float = 30.0,
         rate_limit: float = 2.0,
+        rate_burst: int = 1,
         retry_count: int = 3,
         retry_backoff: float = 1.0,
         verify_ssl: bool = True,
@@ -98,6 +99,9 @@ class OpsManagerClient:
             timeout: Request timeout in seconds (default 30).
             rate_limit: Maximum requests per second (default 2).
                 Set conservatively to protect production Ops Manager.
+            rate_burst: Maximum burst size (default 1 = no bursting).
+                With burst=1, requests are strictly spaced by rate_limit.
+                Higher values allow short bursts before throttling.
             retry_count: Number of retries for failed requests (default 3).
             retry_backoff: Base backoff time between retries in seconds.
             verify_ssl: Whether to verify SSL certificates (default True).
@@ -112,6 +116,7 @@ class OpsManagerClient:
             auth=auth,
             timeout=timeout,
             rate_limit=rate_limit,
+            rate_burst=rate_burst,
             retry_count=retry_count,
             retry_backoff=retry_backoff,
             verify_ssl=verify_ssl,
