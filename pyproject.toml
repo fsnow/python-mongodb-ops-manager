@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "opsmanager"
-version = "0.2.0"
+version = "0.2.1"
 description = "Python client library for MongoDB Ops Manager API"
 readme = "README.md"
 license = "Apache-2.0"
 authors = [
-    {name = "Frank Snow", email = "frank.snow@mongodb.com"}
+    {name = "Frank Snow"}
 ]
 maintainers = [
-    {name = "Frank Snow", email = "frank.snow@mongodb.com"}
+    {name = "Frank Snow"}
 ]
 keywords = [
     "mongodb",
