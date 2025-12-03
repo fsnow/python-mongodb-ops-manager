@@ -1,14 +1,6 @@
-# python-mongodb-ops-manager
-
-Python client library for MongoDB Ops Manager API
-
-## Status
-
-**Beta** - Core functionality implemented and tested against live Ops Manager
-
-## Overview
-
 A production-quality Python client library for the MongoDB Ops Manager API, designed to enable automated health checks, metrics collection, and fleet management for MongoDB deployments.
+
+**Status:** Beta - Core functionality implemented and tested against live Ops Manager
 
 ## Features
 
@@ -186,11 +178,14 @@ This library is modeled after the official [MongoDB Go SDK](https://github.com/m
 
 ## Use Cases
 
+This library has been tested primarily with **read-only API keys** for monitoring and reporting use cases:
+
 - Automated health check reporting for large MongoDB fleets
 - Metrics collection and statistical analysis
 - Performance advisor recommendations aggregation
 - Cluster topology documentation
-- Operational automation and scripting
+
+Write operations (automation config, backup management, etc.) are not yet fully implemented or tested.
 
 ## Inspiration
 
