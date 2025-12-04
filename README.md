@@ -1,4 +1,4 @@
-A production-quality Python client library for the MongoDB Ops Manager API, designed to enable automated health checks, metrics collection, and fleet management for MongoDB deployments.
+A Python client library for the MongoDB Ops Manager API, designed to enable automated health checks, metrics collection, and fleet management for MongoDB deployments.
 
 **Status:** Beta - Core functionality implemented and tested against live Ops Manager
 
