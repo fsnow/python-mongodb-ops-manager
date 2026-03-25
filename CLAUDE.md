@@ -126,9 +126,13 @@ export OM_PRIVATE_KEY="your-key"
 python tests/test_live.py --verbose
 
 # Run validation against mongocli (requires mongocli installed)
+export OM_ORG_ID="your-org-id"
 export OM_PROJECT_ID="your-project"
 python tests/validate_against_mongocli.py
 ```
+
+> **Required for every change**: Both `test_live.py` and `validate_against_mongocli.py` must pass before
+> committing or publishing. The mongocli validation step was skipped in v0.3.0 and should not be skipped again.
 
 ## Related Projects
 

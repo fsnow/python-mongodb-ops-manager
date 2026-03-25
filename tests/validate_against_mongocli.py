@@ -30,6 +30,7 @@ Usage:
     export OM_PRIVATE_KEY="your-private-key"
     export OM_ORG_ID="your-org-id"
     export OM_PROJECT_ID="your-project-id"
+    export OM_CLUSTER_ID="your-cluster-id"  # optional, auto-detected if not set
 
     # Run validation
     python tests/validate_against_mongocli.py
@@ -37,6 +38,9 @@ Usage:
     # Or validate specific endpoints
     python tests/validate_against_mongocli.py --endpoint hosts
     python tests/validate_against_mongocli.py --endpoint alerts
+    python tests/validate_against_mongocli.py --endpoint agents
+    python tests/validate_against_mongocli.py --endpoint backup
+    python tests/validate_against_mongocli.py --endpoint backup --cluster-id <clusterId>
 
 Note:
     mongocli environment variables (MCLI_*) are set automatically from OM_* vars.
@@ -105,6 +109,12 @@ def run_mongocli(args: List[str], env: Optional[Dict[str, str]] = None) -> Dict[
     return json.loads(result.stdout)
 
 
+def diff_field(diff: str) -> str:
+    """Extract the leaf field name from a difference string like 'Missing in CLI: foo.bar.baz'."""
+    path = diff.split(": ", 1)[-1]  # everything after the prefix
+    return path.split(".")[-1]      # last component (handles nested and top-level)
+
+
 def compare_results(
     py_result: Any,
     cli_result: Any,
@@ -166,23 +176,26 @@ def validate_hosts(client: OpsManagerClient, project_id: str, mongocli_env: Dict
     print(f"Python returned {len(py_hosts)} hosts")
     print(f"mongocli returned {len(cli_hosts)} hosts")
 
-    # Fields that our library returns but mongocli omits (mongocli filters these out)
-    # These are NOT errors - our library is more complete
-    expected_extra_fields = {
+    # Fields our library returns that mongocli omits (our library is more complete)
+    expected_py_extras = {
         "lastIndexSizeBytes", "hidden", "lowUlimit", "systemInfo",
-        "lastDataSizeBytes", "slaveDelaySec", "hiddenSecondary"
+        "lastDataSizeBytes", "slaveDelaySec", "hiddenSecondary",
+        "hasStartupWarnings", "journalingEnabled",
     }
+    # Fields mongocli adds as Go struct zero-values not present in the actual API response
+    expected_cli_extras = set()
 
     # Compare
     differences = compare_results(py_hosts, cli_hosts)
 
-    # Filter out expected differences (fields we have that mongocli doesn't)
+    # Filter out expected differences
     unexpected_differences = []
     for diff in differences:
-        if "Missing in CLI:" in diff:
-            field = diff.split(".")[-1]
-            if field in expected_extra_fields:
-                continue  # Expected - our library returns more data
+        field = diff_field(diff)
+        if "Missing in CLI:" in diff and field in expected_py_extras:
+            continue
+        if "Missing in Python:" in diff and field in expected_cli_extras:
+            continue
         unexpected_differences.append(diff)
 
     if unexpected_differences:
@@ -215,8 +228,8 @@ def validate_alerts(client: OpsManagerClient, project_id: str, mongocli_env: Dic
     print(f"Python returned {len(py_alerts)} alerts")
     print(f"mongocli returned {len(cli_alerts)} alerts")
 
-    # Fields that our library returns but mongocli omits
-    expected_extra_fields = {"orgId", "hostId"}
+    expected_py_extras = {"orgId", "hostId"}
+    expected_cli_extras: Set[str] = set()
 
     # Compare
     differences = compare_results(py_alerts, cli_alerts)
@@ -224,10 +237,11 @@ def validate_alerts(client: OpsManagerClient, project_id: str, mongocli_env: Dic
     # Filter out expected differences
     unexpected_differences = []
     for diff in differences:
-        if "Missing in CLI:" in diff:
-            field = diff.split(".")[-1]
-            if field in expected_extra_fields:
-                continue
+        field = diff_field(diff)
+        if "Missing in CLI:" in diff and field in expected_py_extras:
+            continue
+        if "Missing in Python:" in diff and field in expected_cli_extras:
+            continue
         unexpected_differences.append(diff)
 
     if unexpected_differences:
@@ -244,10 +258,119 @@ def validate_alerts(client: OpsManagerClient, project_id: str, mongocli_env: Dic
     return True
 
 
+def validate_agents(client: OpsManagerClient, project_id: str, mongocli_env: Dict[str, str]) -> bool:
+    """Validate agents endpoint."""
+    print("\n=== Validating Agents ===")
+    all_passed = True
+
+    # Fields mongocli adds as Go struct zero-values not present in the actual API response
+    expected_cli_extras = {"tag", "pingCount", "isManaged", "lastPing"}
+
+    for agent_type in ("MONITORING", "BACKUP", "AUTOMATION"):
+        py_agents = client.agents.list(project_id=project_id, agent_type=agent_type, as_obj=False)
+
+        cli_result = run_mongocli(
+            ["agents", "list", agent_type, "--projectId", project_id], env=mongocli_env
+        )
+        cli_agents = cli_result.get("results", [])
+
+        print(f"  {agent_type}: Python={len(py_agents)}, mongocli={len(cli_agents)}")
+
+        differences = compare_results(py_agents, cli_agents)
+        unexpected = [
+            d for d in differences
+            if not ("Missing in Python:" in d and diff_field(d) in expected_cli_extras)
+        ]
+        if unexpected:
+            print(f"  Differences for {agent_type}:")
+            for diff in unexpected[:20]:
+                print(f"    - {diff}")
+            all_passed = False
+
+    if all_passed:
+        print("PASS: Agents match!")
+    return all_passed
+
+
+def validate_backup(
+    client: OpsManagerClient,
+    project_id: str,
+    mongocli_env: Dict[str, str],
+    cluster_id: Optional[str] = None,
+) -> bool:
+    """Validate backup snapshots and config endpoints."""
+    print("\n=== Validating Backup ===")
+
+    # Resolve cluster ID if not provided
+    if not cluster_id:
+        clusters = client.clusters.list(project_id=project_id)
+        if not clusters:
+            print("  No clusters found — skipping backup validation")
+            return True
+        cluster_id = clusters[0].id
+        print(f"  Using cluster: {clusters[0].cluster_name} ({cluster_id})")
+
+    all_passed = True
+
+    # Validate backup config
+    try:
+        py_config = client.backup.get_backup_config(project_id, cluster_id)
+        cli_config = run_mongocli(
+            ["backups", "config", "describe", cluster_id, "--projectId", project_id],
+            env=mongocli_env,
+        )
+
+        # Fields our library returns that mongocli omits from backup config
+        expected_config_py_extras = {
+            "excludedNamespaces", "multiRegionMisconfigured", "multiRegionBackupEnabled"
+        }
+        differences = compare_results(py_config, cli_config)
+        unexpected = [
+            d for d in differences
+            if not ("Missing in CLI:" in d and diff_field(d) in expected_config_py_extras)
+        ]
+        if unexpected:
+            print("  Config differences:")
+            for diff in unexpected[:20]:
+                print(f"    - {diff}")
+            all_passed = False
+        else:
+            print("  Config: match")
+
+    except Exception as e:
+        if "BACKUP_NOT_ENABLED" in str(e) or "404" in str(e):
+            print("  (Backup not enabled for this cluster — skipping)")
+            return True
+        raise
+
+    # Validate snapshots
+    py_snapshots = client.backup.list_snapshots(project_id, cluster_id, as_obj=False)
+    cli_result = run_mongocli(
+        ["backups", "snapshots", "list", cluster_id, "--projectId", project_id],
+        env=mongocli_env,
+    )
+    cli_snapshots = cli_result.get("results", [])
+
+    print(f"  Snapshots: Python={len(py_snapshots)}, mongocli={len(cli_snapshots)}")
+
+    differences = compare_results(py_snapshots, cli_snapshots)
+    if differences:
+        print("  Snapshot differences:")
+        for diff in differences[:20]:
+            print(f"    - {diff}")
+        all_passed = False
+
+    if all_passed:
+        print("PASS: Backup match!")
+    return all_passed
+
+
 def main():
     parser = argparse.ArgumentParser(description="Validate Python library against mongocli")
-    parser.add_argument("--endpoint", choices=["hosts", "alerts", "all"],
+    parser.add_argument("--endpoint", choices=["hosts", "alerts", "agents", "backup", "all"],
                         default="all", help="Which endpoint to validate")
+    parser.add_argument("--cluster-id", default=os.environ.get("OM_CLUSTER_ID"),
+                        help="Cluster ID for backup validation")
     parser.add_argument("--base-url", default=os.environ.get("OM_BASE_URL"),
                         help="Ops Manager base URL")
     parser.add_argument("--public-key", default=os.environ.get("OM_PUBLIC_KEY"),
@@ -303,6 +426,12 @@ def main():
 
         if args.endpoint in ("alerts", "all"):
             results["alerts"] = validate_alerts(client, args.project_id, mongocli_env)
+
+        if args.endpoint in ("agents", "all"):
+            results["agents"] = validate_agents(client, args.project_id, mongocli_env)
+
+        if args.endpoint in ("backup", "all"):
+            results["backup"] = validate_backup(client, args.project_id, mongocli_env, args.cluster_id)
 
     finally:
         client.close()
