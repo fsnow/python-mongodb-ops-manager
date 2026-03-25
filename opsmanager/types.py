@@ -485,6 +485,98 @@ class Alert:
         )
 
 
+@dataclass
+class Agent:
+    """A MongoDB Ops Manager agent (monitoring, backup, or automation)."""
+    hostname: str
+    state_name: str = ""
+    type_name: str = ""
+    last_ping: Optional[str] = None
+    ping_count: int = 0
+    conf_count: int = 0
+    is_managed: bool = False
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Agent":
+        return cls(
+            hostname=data.get("hostname", ""),
+            state_name=data.get("stateName", ""),
+            type_name=data.get("typeName", ""),
+            last_ping=data.get("lastPing"),
+            ping_count=data.get("pingCount", 0),
+            conf_count=data.get("confCount", 0),
+            is_managed=data.get("isManaged", False),
+            links=[Link.from_dict(link) for link in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class SnapshotPart:
+    """One replica set's portion of a backup snapshot."""
+    cluster_id: str = ""
+    compression_setting: str = ""
+    data_size_bytes: int = 0
+    encryption_enabled: bool = False
+    file_size_bytes: int = 0
+    mongod_version: str = ""
+    replica_set_name: str = ""
+    replica_state: str = ""
+    storage_size_bytes: int = 0
+    type_name: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SnapshotPart":
+        return cls(
+            cluster_id=data.get("clusterId", ""),
+            compression_setting=data.get("compressionSetting", ""),
+            data_size_bytes=data.get("dataSizeBytes", 0),
+            encryption_enabled=data.get("encryptionEnabled", False),
+            file_size_bytes=data.get("fileSizeBytes", 0),
+            mongod_version=data.get("mongodVersion", ""),
+            replica_set_name=data.get("replicaSetName", ""),
+            replica_state=data.get("replicaState", ""),
+            storage_size_bytes=data.get("storageSizeBytes", 0),
+            type_name=data.get("typeName", ""),
+        )
+
+
+@dataclass
+class Snapshot:
+    """A backup snapshot."""
+    id: str
+    cluster_id: str
+    complete: bool
+    group_id: str
+    do_not_delete: bool = False
+    expires: Optional[str] = None
+    created: Optional[Dict[str, Any]] = None
+    last_oplog_applied_timestamp: Optional[Dict[str, Any]] = None
+    parts: List[SnapshotPart] = field(default_factory=list)
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Snapshot":
+        return cls(
+            id=data.get("id", ""),
+            cluster_id=data.get("clusterId", ""),
+            complete=data.get("complete", False),
+            group_id=data.get("groupId", ""),
+            do_not_delete=data.get("doNotDelete", False),
+            expires=data.get("expires"),
+            created=data.get("created"),
+            last_oplog_applied_timestamp=data.get("lastOplogAppliedTimestamp"),
+            parts=[SnapshotPart.from_dict(p) for p in data.get("parts", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
 # Type alias for paginated results
 @dataclass
 class PaginatedResult:

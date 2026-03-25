@@ -26,6 +26,8 @@ from opsmanager.services.deployments import DeploymentsService
 from opsmanager.services.measurements import MeasurementsService
 from opsmanager.services.performance_advisor import PerformanceAdvisorService
 from opsmanager.services.alerts import AlertsService
+from opsmanager.services.agents import AgentsService
+from opsmanager.services.backup import BackupService
 
 __all__ = [
     "BaseService",
@@ -36,4 +38,6 @@ __all__ = [
     "MeasurementsService",
     "PerformanceAdvisorService",
     "AlertsService",
+    "AgentsService",
+    "BackupService",
 ]

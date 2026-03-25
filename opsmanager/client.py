@@ -29,6 +29,8 @@ from opsmanager.services.deployments import DeploymentsService
 from opsmanager.services.measurements import MeasurementsService
 from opsmanager.services.performance_advisor import PerformanceAdvisorService
 from opsmanager.services.alerts import AlertsService
+from opsmanager.services.agents import AgentsService
+from opsmanager.services.backup import BackupService
 
 
 class OpsManagerClient:
@@ -71,6 +73,8 @@ class OpsManagerClient:
         measurements: Service for time-series metrics.
         performance_advisor: Service for slow query analysis and index suggestions.
         alerts: Service for alert management.
+        agents: Service for monitoring, backup, and automation agent status.
+        backup: Service for backup snapshots and configuration.
     """
 
     # Default base URL for Cloud Manager (Ops Manager URL must be provided)
@@ -131,6 +135,8 @@ class OpsManagerClient:
         self._measurements = MeasurementsService(self._session)
         self._performance_advisor = PerformanceAdvisorService(self._session)
         self._alerts = AlertsService(self._session)
+        self._agents = AgentsService(self._session)
+        self._backup = BackupService(self._session)
 
     @property
     def organizations(self) -> OrganizationsService:
@@ -166,6 +172,16 @@ class OpsManagerClient:
     def alerts(self) -> AlertsService:
         """Service for alert management."""
         return self._alerts
+
+    @property
+    def agents(self) -> AgentsService:
+        """Service for monitoring, backup, and automation agent status."""
+        return self._agents
+
+    @property
+    def backup(self) -> BackupService:
+        """Service for backup snapshots and configuration."""
+        return self._backup
 
     def set_rate_limit(self, rate: float) -> None:
         """Update the rate limit for API requests.

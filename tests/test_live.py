@@ -38,7 +38,7 @@ from typing import Optional
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from opsmanager import OpsManagerClient
-from opsmanager.types import Host, Cluster, Organization, Project, Alert
+from opsmanager.types import Host, Cluster, Organization, Project, Alert, Agent, Snapshot
 
 
 class LiveTestRunner:
@@ -257,6 +257,75 @@ class LiveTestRunner:
             else:
                 raise
 
+    def test_agents(self) -> None:
+        """Test agents endpoint."""
+        assert self.project_id, "Project ID required (run projects test first)"
+
+        # Test monitoring agents
+        monitoring = self.client.agents.list_monitoring(self.project_id)
+        self.log(f"  Monitoring agents: {len(monitoring)}")
+
+        for agent in monitoring:
+            assert isinstance(agent, Agent), f"Expected Agent, got {type(agent)}"
+            assert agent.hostname, "Agent hostname is empty"
+            assert agent.type_name == "MONITORING", f"Expected MONITORING, got {agent.type_name}"
+            self.log(f"    {agent.hostname} - {agent.state_name} (ping: {agent.last_ping})")
+
+        # Test backup agents
+        backup = self.client.agents.list_backup(self.project_id)
+        self.log(f"  Backup agents: {len(backup)}")
+
+        for agent in backup:
+            assert isinstance(agent, Agent), f"Expected Agent, got {type(agent)}"
+            assert agent.type_name == "BACKUP", f"Expected BACKUP, got {agent.type_name}"
+            self.log(f"    {agent.hostname} - {agent.state_name}")
+
+        # Test generic list with automation type
+        automation = self.client.agents.list(self.project_id, "AUTOMATION")
+        self.log(f"  Automation agents: {len(automation)}")
+
+    def test_backup(self) -> None:
+        """Test backup snapshots and config endpoint."""
+        assert self.project_id, "Project ID required (run projects test first)"
+
+        clusters = self.client.clusters.list(self.project_id)
+        assert len(clusters) > 0, "No clusters found for backup test"
+
+        cluster = clusters[0]
+        self.log(f"  Testing backup for cluster: {cluster.cluster_name} ({cluster.id})")
+
+        # Test backup config
+        try:
+            config = self.client.backup.get_backup_config(self.project_id, cluster.id)
+            assert isinstance(config, dict), f"Expected dict, got {type(config)}"
+            self.log(f"  Backup config keys: {list(config.keys())}")
+        except Exception as e:
+            if "BACKUP_NOT_ENABLED" in str(e) or "404" in str(e):
+                self.log("  (Backup not enabled for this cluster — skipping snapshots)")
+                return
+            raise
+
+        # Test list snapshots
+        snapshots = self.client.backup.list_snapshots(self.project_id, cluster.id)
+        self.log(f"  Snapshots: {len(snapshots)}")
+
+        if snapshots:
+            snap = snapshots[0]
+            assert isinstance(snap, Snapshot), f"Expected Snapshot, got {type(snap)}"
+            assert snap.id, "Snapshot ID is empty"
+            self.log(f"    Latest: {snap.id} complete={snap.complete} created={snap.created}")
+
+            if snap.parts:
+                for part in snap.parts:
+                    self.log(f"      Part: {part.replica_set_name} ({part.replica_state}) v{part.mongod_version}")
+
+            # Test get by ID
+            snap_by_id = self.client.backup.get_snapshot(self.project_id, cluster.id, snap.id)
+            assert snap_by_id.id == snap.id, "Snapshot ID mismatch"
+            self.log(f"  Get by ID: OK")
+        else:
+            self.log("  (No snapshots yet)")
+
     def test_raw_dict_response(self) -> None:
         """Test that as_obj=False returns raw dictionaries."""
         assert self.org_id, "Organization ID required (run organizations test first)"
@@ -280,6 +349,8 @@ class LiveTestRunner:
             ("measurements", self.test_measurements),
             ("databases", self.test_databases),
             ("alerts", self.test_alerts),
+            ("agents", self.test_agents),
+            ("backup", self.test_backup),
             ("performance_advisor", self.test_performance_advisor),
             ("raw_dict_response", self.test_raw_dict_response),
         ]
