@@ -176,6 +176,23 @@ class BaseService:
             max_items=max_items,
         )
 
+    def _download(
+        self,
+        path: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> bytes:
+        """Make a GET request and return raw bytes (for binary/gzip downloads).
+
+        Args:
+            path: API path (relative to BASE_PATH).
+            params: Query parameters.
+
+        Returns:
+            Raw response bytes.
+        """
+        full_path = f"{self.BASE_PATH}/{path.lstrip('/')}"
+        return self._session.download(full_path, params=params)
+
     def _fetch_all(
         self,
         path: str,

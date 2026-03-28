@@ -22,6 +22,7 @@ Handles HTTP requests with:
 - Error handling
 """
 
+import json
 import logging
 import time
 from threading import Lock
@@ -191,10 +192,11 @@ class NetworkSession:
         self._session = requests.Session()
         self._session.auth = auth
         self._session.verify = verify_ssl
+        from opsmanager import __version__  # deferred to avoid circular import
         self._session.headers.update({
             "Accept": "application/json",
             "Content-Type": "application/json",
-            "User-Agent": user_agent or "python-opsmanager/0.1.0",
+            "User-Agent": user_agent or f"python-opsmanager/{__version__}",
         })
 
         # Initialize rate limiter
@@ -317,7 +319,7 @@ class NetworkSession:
                 # Parse response
                 try:
                     response_data = response.json() if response.content else {}
-                except ValueError:
+                except json.JSONDecodeError:
                     response_data = {"raw": response.text}
 
                 # Check for errors
@@ -414,6 +416,118 @@ class NetworkSession:
     ) -> Dict[str, Any]:
         """Make a DELETE request."""
         return self.request("DELETE", path, params=params, **kwargs)
+
+    def download(
+        self,
+        path: str,
+        params: Optional[Dict[str, Any]] = None,
+    ) -> bytes:
+        """Make a GET request and return raw response bytes.
+
+        Used for endpoints that return binary content (gzip archives, logs).
+        Subject to the same rate limiting and retry logic as JSON requests.
+
+        Args:
+            path: API path (relative to base_url).
+            params: Query parameters.
+
+        Returns:
+            Raw response bytes.
+
+        Raises:
+            OpsManagerError: For API errors.
+            OpsManagerTimeoutError: If request times out.
+            OpsManagerConnectionError: If connection fails.
+            OpsManagerRateLimitError: If rate limit is exceeded.
+        """
+        url = urljoin(self.base_url + "/", path.lstrip("/"))
+        last_exception: Optional[Exception] = None
+
+        for attempt in range(self.retry_count + 1):
+            if not self._rate_limiter.acquire(timeout=self.timeout):
+                raise OpsManagerRateLimitError(
+                    message="Rate limit acquisition timed out",
+                    detail=f"Could not acquire rate limit token within {self.timeout}s",
+                )
+
+            if self._on_request:
+                self._on_request("GET", url, {"params": params})
+
+            try:
+                logger.debug(
+                    "Download [%d/%d]: GET %s",
+                    attempt + 1,
+                    self.retry_count + 1,
+                    url,
+                )
+
+                response = self._session.get(
+                    url,
+                    params=params,
+                    timeout=self.timeout,
+                )
+
+                if self._on_response:
+                    self._on_response(response)
+
+                logger.debug("Response: %d %s", response.status_code, response.reason)
+
+                if response.status_code == 429:
+                    retry_after = int(response.headers.get("Retry-After", 60))
+                    if attempt < self.retry_count:
+                        logger.warning(
+                            "Rate limited by server, waiting %ds before retry",
+                            retry_after,
+                        )
+                        time.sleep(retry_after)
+                        continue
+                    raise OpsManagerRateLimitError(
+                        message="Rate limit exceeded",
+                        retry_after=retry_after,
+                    )
+
+                if not response.ok:
+                    try:
+                        response_data = response.json()
+                    except json.JSONDecodeError:
+                        response_data = {"raw": response.text}
+                    raise_for_status(response.status_code, response_data)
+
+                return response.content
+
+            except requests.exceptions.Timeout as e:
+                last_exception = OpsManagerTimeoutError(
+                    message="Request timed out",
+                    detail=str(e),
+                )
+                if attempt < self.retry_count:
+                    wait_time = self.retry_backoff * (2 ** attempt)
+                    logger.warning("Request timed out, retrying in %.1fs", wait_time)
+                    time.sleep(wait_time)
+                    continue
+
+            except requests.exceptions.ConnectionError as e:
+                last_exception = OpsManagerConnectionError(
+                    message="Connection failed",
+                    detail=str(e),
+                )
+                if attempt < self.retry_count:
+                    wait_time = self.retry_backoff * (2 ** attempt)
+                    logger.warning("Connection failed, retrying in %.1fs", wait_time)
+                    time.sleep(wait_time)
+                    continue
+
+            except OpsManagerRateLimitError:
+                raise
+
+            except Exception as e:
+                logger.error("Download failed: %s", e)
+                raise
+
+        if last_exception:
+            raise last_exception
+
+        raise OpsManagerConnectionError(message="Download failed after all retries")
 
     def close(self) -> None:
         """Close the underlying session."""

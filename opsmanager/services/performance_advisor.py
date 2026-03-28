@@ -24,6 +24,7 @@ See: https://docs.opsmanager.mongodb.com/current/reference/api/performance-advis
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
+from opsmanager.errors import OpsManagerError
 from opsmanager.services.base import BaseService
 from opsmanager.types import Namespace, SlowQuery, SuggestedIndex, QueryShape
 
@@ -245,7 +246,7 @@ class PerformanceAdvisorService(BaseService):
                     as_obj=as_obj,
                 )
                 results[host_id] = suggestions
-            except Exception as e:
+            except OpsManagerError as e:
                 # Log but continue with other hosts
                 results[host_id] = {"error": str(e)}
 

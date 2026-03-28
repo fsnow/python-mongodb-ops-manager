@@ -24,7 +24,7 @@ See: https://docs.opsmanager.mongodb.com/current/reference/api/groups/
 from typing import Any, Dict, List, Optional
 
 from opsmanager.services.base import BaseService
-from opsmanager.types import Project
+from opsmanager.types import Project, User, Team
 from opsmanager.pagination import PageIterator
 
 
@@ -108,3 +108,51 @@ class ProjectsService(BaseService):
         """
         response = self._get(f"groups/byName/{project_name}")
         return Project.from_dict(response) if as_obj else response
+
+    def list_users(
+        self,
+        project_id: str,
+        items_per_page: int = 100,
+        as_obj: bool = True,
+    ) -> List[User]:
+        """Get all users with access to a project.
+
+        Returns all users who have been granted access to this project.
+        Use for granular access control reviews alongside
+        ``organizations.list_users``.
+
+        Args:
+            project_id: Project (group) ID.
+            items_per_page: Number of items per page.
+            as_obj: Return User objects if True, dicts if False.
+
+        Returns:
+            List of users.
+        """
+        return self._fetch_all(
+            path=f"groups/{project_id}/users",
+            item_type=User if as_obj else None,
+            items_per_page=items_per_page,
+        )
+
+    def get_teams(
+        self,
+        project_id: str,
+        items_per_page: int = 100,
+        as_obj: bool = True,
+    ) -> List[Team]:
+        """Get all teams assigned to a project.
+
+        Args:
+            project_id: Project (group) ID.
+            items_per_page: Number of items per page.
+            as_obj: Return Team objects if True, dicts if False.
+
+        Returns:
+            List of teams with their roles in this project.
+        """
+        return self._fetch_all(
+            path=f"groups/{project_id}/teams",
+            item_type=Team if as_obj else None,
+            items_per_page=items_per_page,
+        )

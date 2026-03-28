@@ -23,7 +23,7 @@ See: https://docs.opsmanager.mongodb.com/current/reference/api/agents/
 from typing import Any, Dict, List, Optional
 
 from opsmanager.services.base import BaseService
-from opsmanager.types import Agent
+from opsmanager.types import Agent, AgentAPIKey, AgentVersions
 from opsmanager.pagination import PageIterator
 
 
@@ -140,3 +140,73 @@ class AgentsService(BaseService):
             items_per_page=items_per_page,
             as_obj=as_obj,
         )
+
+    def list_links(
+        self,
+        project_id: str,
+    ) -> Dict[str, Any]:
+        """Get all agent links (download URLs) for a project.
+
+        Returns the agent download links — URLs for downloading monitoring,
+        backup, and automation agent installers for this project.
+
+        Args:
+            project_id: Project (group) ID.
+
+        Returns:
+            Agent links as a raw dict (API response).
+        """
+        return self._get(f"groups/{project_id}/agents")
+
+    def get_project_versions(
+        self,
+        project_id: str,
+        as_obj: bool = True,
+    ) -> AgentVersions:
+        """Get agent version information for a project.
+
+        Returns the current versions of all agents in the project and flags
+        indicating whether any agents are out of date or deprecated.
+        Useful for security patch compliance reporting.
+
+        Args:
+            project_id: Project (group) ID.
+            as_obj: Return AgentVersions object if True, dict if False.
+
+        Returns:
+            Agent version summary for the project.
+        """
+        response = self._get(f"groups/{project_id}/agents/versions")
+        return AgentVersions.from_dict(response) if as_obj else response
+
+    def get_global_versions(self) -> Dict[str, Any]:
+        """Get the latest available agent versions across the Ops Manager deployment.
+
+        Returns the current globally-available versions of the automation,
+        monitoring, and backup agents. Compare against project versions to
+        identify which projects have outdated agents.
+
+        Returns:
+            Global software versions as a raw dict (API response).
+        """
+        return self._get("softwareComponents/versions")
+
+    def list_api_keys(
+        self,
+        project_id: str,
+        as_obj: bool = True,
+    ) -> List[AgentAPIKey]:
+        """Get all agent API keys for a project.
+
+        Args:
+            project_id: Project (group) ID.
+            as_obj: Return AgentAPIKey objects if True, dicts if False.
+
+        Returns:
+            List of agent API keys.
+        """
+        response = self._get(f"groups/{project_id}/agentapikeys")
+        results = response if isinstance(response, list) else response.get("results", [])
+        if as_obj:
+            return [AgentAPIKey.from_dict(item) for item in results]
+        return results

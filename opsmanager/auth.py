@@ -84,9 +84,9 @@ def create_auth(
         In a future version, this could support loading keys from
         environment variables or configuration files.
     """
-    if not public_key:
+    if not public_key or not public_key.strip():
         raise ValueError("public_key is required")
-    if not private_key:
+    if not private_key or not private_key.strip():
         raise ValueError("private_key is required")
 
     return OpsManagerAuth(public_key=public_key, private_key=private_key)

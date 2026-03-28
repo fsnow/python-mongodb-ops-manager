@@ -23,7 +23,7 @@ See: https://docs.opsmanager.mongodb.com/current/reference/api/snapshots/
 from typing import Any, Dict, List, Optional
 
 from opsmanager.services.base import BaseService
-from opsmanager.types import Snapshot
+from opsmanager.types import BackupConfig, Checkpoint, RestoreJob, Snapshot, SnapshotSchedule
 from opsmanager.pagination import PageIterator
 
 
@@ -106,21 +106,173 @@ class BackupService(BaseService):
         )
         return Snapshot.from_dict(response) if as_obj else response
 
+    def list_backup_configs(
+        self,
+        project_id: str,
+        items_per_page: int = 100,
+        as_obj: bool = True,
+    ) -> List[BackupConfig]:
+        """Get backup configurations for all clusters in a project.
+
+        Returns the backup configuration for every cluster in the project.
+        Use this to check backup coverage — any cluster absent from the results
+        or with ``statusName != "STARTED"`` is not being backed up.
+
+        Args:
+            project_id: Project (group) ID.
+            items_per_page: Number of items per page.
+            as_obj: Return BackupConfig objects if True, dicts if False.
+
+        Returns:
+            List of backup configurations, one per cluster.
+        """
+        return self._fetch_all(
+            path=f"groups/{project_id}/backupConfigs",
+            item_type=BackupConfig if as_obj else None,
+            items_per_page=items_per_page,
+        )
+
     def get_backup_config(
         self,
         project_id: str,
         cluster_id: str,
-    ) -> Dict[str, Any]:
-        """Get the backup configuration for a cluster.
-
-        The backup config includes the snapshot schedule, which is needed
-        to calculate backup lag (compare last snapshot time against frequency).
+        as_obj: bool = True,
+    ) -> BackupConfig:
+        """Get the backup configuration for a specific cluster.
 
         Args:
             project_id: Project (group) ID.
             cluster_id: Cluster ID.
+            as_obj: Return BackupConfig object if True, dict if False.
 
         Returns:
-            Backup configuration as a dict (raw API response).
+            Backup configuration for the cluster.
         """
-        return self._get(f"groups/{project_id}/backupConfigs/{cluster_id}")
+        response = self._get(f"groups/{project_id}/backupConfigs/{cluster_id}")
+        return BackupConfig.from_dict(response) if as_obj else response
+
+    def get_snapshot_schedule(
+        self,
+        project_id: str,
+        cluster_id: str,
+        as_obj: bool = True,
+    ) -> SnapshotSchedule:
+        """Get the snapshot retention schedule for a cluster.
+
+        Returns the snapshot frequency and retention policy. This is the
+        primary document for evidencing backup retention compliance — e.g.,
+        "snapshots are taken every 6 hours and retained for 7 days".
+
+        Args:
+            project_id: Project (group) ID.
+            cluster_id: Cluster ID.
+            as_obj: Return SnapshotSchedule object if True, dict if False.
+
+        Returns:
+            Snapshot schedule with retention periods.
+        """
+        response = self._get(
+            f"groups/{project_id}/backupConfigs/{cluster_id}/snapshotSchedule"
+        )
+        return SnapshotSchedule.from_dict(response) if as_obj else response
+
+    def list_restore_jobs(
+        self,
+        project_id: str,
+        cluster_id: str,
+        items_per_page: int = 100,
+        as_obj: bool = True,
+    ) -> List[RestoreJob]:
+        """Get all restore jobs for a cluster.
+
+        Returns the history of restore operations. Use this to document
+        DR test results — evidence that backups have been successfully
+        restored as required by continuity planning obligations.
+
+        Args:
+            project_id: Project (group) ID.
+            cluster_id: Cluster ID.
+            items_per_page: Number of items per page.
+            as_obj: Return RestoreJob objects if True, dicts if False.
+
+        Returns:
+            List of restore jobs.
+        """
+        return self._fetch_all(
+            path=f"groups/{project_id}/clusters/{cluster_id}/restoreJobs",
+            item_type=RestoreJob if as_obj else None,
+            items_per_page=items_per_page,
+        )
+
+    def get_restore_job(
+        self,
+        project_id: str,
+        cluster_id: str,
+        job_id: str,
+        as_obj: bool = True,
+    ) -> RestoreJob:
+        """Get a single restore job by ID.
+
+        Args:
+            project_id: Project (group) ID.
+            cluster_id: Cluster ID.
+            job_id: Restore job ID.
+            as_obj: Return RestoreJob object if True, dict if False.
+
+        Returns:
+            Restore job details.
+        """
+        response = self._get(
+            f"groups/{project_id}/clusters/{cluster_id}/restoreJobs/{job_id}"
+        )
+        return RestoreJob.from_dict(response) if as_obj else response
+
+    def list_checkpoints(
+        self,
+        project_id: str,
+        cluster_name: str,
+        items_per_page: int = 100,
+        as_obj: bool = True,
+    ) -> List[Checkpoint]:
+        """Get all backup checkpoints for a sharded cluster.
+
+        Checkpoints are created between snapshots for sharded clusters, allowing
+        point-in-time restores at finer granularity than snapshot intervals.
+
+        Args:
+            project_id: Project (group) ID.
+            cluster_name: Cluster name (not ID — the API uses name here).
+            items_per_page: Number of items per page.
+            as_obj: Return Checkpoint objects if True, dicts if False.
+
+        Returns:
+            List of checkpoints.
+        """
+        return self._fetch_all(
+            path=f"groups/{project_id}/clusters/{cluster_name}/checkpoints",
+            item_type=Checkpoint if as_obj else None,
+            items_per_page=items_per_page,
+        )
+
+    def get_checkpoint(
+        self,
+        project_id: str,
+        cluster_id: str,
+        checkpoint_id: str,
+        as_obj: bool = True,
+    ) -> Checkpoint:
+        """Get a single checkpoint by ID.
+
+        Args:
+            project_id: Project (group) ID.
+            cluster_id: Cluster ID.
+            checkpoint_id: Checkpoint ID.
+            as_obj: Return Checkpoint object if True, dict if False.
+
+        Returns:
+            Checkpoint details.
+        """
+        response = self._get(
+            f"groups/{project_id}/clusters/{cluster_id}/checkpoints/{checkpoint_id}"
+        )
+        return Checkpoint.from_dict(response) if as_obj else response

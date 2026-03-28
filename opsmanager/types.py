@@ -577,6 +577,910 @@ class Snapshot:
         return asdict(self)
 
 
+@dataclass
+class Event:
+    """An audit event from Ops Manager."""
+    id: str
+    created: str
+    event_type_name: str
+    group_id: Optional[str] = None
+    org_id: Optional[str] = None
+    user_id: Optional[str] = None
+    username: Optional[str] = None
+    public_key: Optional[str] = None
+    remote_address: Optional[str] = None
+    api_key_id: Optional[str] = None
+    cluster_name: Optional[str] = None
+    hostname: Optional[str] = None
+    alert_id: Optional[str] = None
+    alert_config_id: Optional[str] = None
+    replica_set_name: Optional[str] = None
+    shard_name: Optional[str] = None
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Event":
+        return cls(
+            id=data.get("id", ""),
+            created=data.get("created", ""),
+            event_type_name=data.get("eventTypeName", ""),
+            group_id=data.get("groupId"),
+            org_id=data.get("orgId"),
+            user_id=data.get("userId"),
+            username=data.get("username"),
+            public_key=data.get("publicKey"),
+            remote_address=data.get("remoteAddress"),
+            api_key_id=data.get("apiKeyId"),
+            cluster_name=data.get("clusterName"),
+            hostname=data.get("hostname"),
+            alert_id=data.get("alertId"),
+            alert_config_id=data.get("alertConfigId"),
+            replica_set_name=data.get("replicaSetName"),
+            shard_name=data.get("shardName"),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class AutomationAgentStatus:
+    """Status of a single automation agent process."""
+    hostname: str
+    conf_count: int = 0
+    goal_version: int = 0
+    last_conf_sent: Optional[str] = None
+    plan: List[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AutomationAgentStatus":
+        return cls(
+            hostname=data.get("hostname", ""),
+            conf_count=data.get("confCount", 0),
+            goal_version=data.get("goalVersion", 0),
+            last_conf_sent=data.get("lastConf"),
+            plan=data.get("plan", []),
+        )
+
+
+@dataclass
+class AutomationStatus:
+    """Automation status for a project — shows whether all agents are up-to-date."""
+    goal_version: int
+    processes: List[AutomationAgentStatus] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AutomationStatus":
+        return cls(
+            goal_version=data.get("goalVersion", 0),
+            processes=[
+                AutomationAgentStatus.from_dict(p)
+                for p in data.get("processes", [])
+            ],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @property
+    def is_in_goal_state(self) -> bool:
+        """Return True if all agents have reached the goal version."""
+        if not self.processes:
+            return True
+        return all(p.goal_version >= self.goal_version for p in self.processes)
+
+
+@dataclass
+class AlertNotification:
+    """A notification channel for an alert configuration."""
+    type_name: str
+    interval_min: int = 0
+    delay_min: int = 0
+    email_enabled: Optional[bool] = None
+    sms_enabled: Optional[bool] = None
+    username: Optional[str] = None
+    team_id: Optional[str] = None
+    email_address: Optional[str] = None
+    mobile_number: Optional[str] = None
+    notification_token: Optional[str] = None
+    room_name: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AlertNotification":
+        return cls(
+            type_name=data.get("typeName", ""),
+            interval_min=data.get("intervalMin", 0),
+            delay_min=data.get("delayMin", 0),
+            email_enabled=data.get("emailEnabled"),
+            sms_enabled=data.get("smsEnabled"),
+            username=data.get("username"),
+            team_id=data.get("teamId"),
+            email_address=data.get("emailAddress"),
+            mobile_number=data.get("mobileNumber"),
+            notification_token=data.get("notificationToken"),
+            room_name=data.get("roomName"),
+        )
+
+
+@dataclass
+class AlertMetricThreshold:
+    """Metric threshold that triggers an alert."""
+    metric_name: str
+    operator: str
+    threshold: float
+    units: str
+    mode: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AlertMetricThreshold":
+        return cls(
+            metric_name=data.get("metricName", ""),
+            operator=data.get("operator", ""),
+            threshold=data.get("threshold", 0.0),
+            units=data.get("units", ""),
+            mode=data.get("mode", ""),
+        )
+
+
+@dataclass
+class AlertMatcher:
+    """A matcher that scopes which resources an alert configuration applies to."""
+    field_name: str
+    operator: str
+    value: str
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AlertMatcher":
+        return cls(
+            field_name=data.get("fieldName", ""),
+            operator=data.get("operator", ""),
+            value=data.get("value", ""),
+        )
+
+
+@dataclass
+class AlertConfiguration:
+    """An alert configuration rule in Ops Manager."""
+    id: str
+    group_id: str
+    event_type_name: str
+    enabled: bool = True
+    matchers: List[AlertMatcher] = field(default_factory=list)
+    notifications: List[AlertNotification] = field(default_factory=list)
+    metric_threshold: Optional[AlertMetricThreshold] = None
+    created: Optional[str] = None
+    updated: Optional[str] = None
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AlertConfiguration":
+        mt = data.get("metricThreshold")
+        return cls(
+            id=data.get("id", ""),
+            group_id=data.get("groupId", ""),
+            event_type_name=data.get("eventTypeName", ""),
+            enabled=data.get("enabled", True),
+            matchers=[AlertMatcher.from_dict(m) for m in data.get("matchers", [])],
+            notifications=[
+                AlertNotification.from_dict(n) for n in data.get("notifications", [])
+            ],
+            metric_threshold=AlertMetricThreshold.from_dict(mt) if mt else None,
+            created=data.get("created"),
+            updated=data.get("updated"),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class MaintenanceWindow:
+    """A scheduled maintenance window."""
+    id: str
+    group_id: str
+    start_date: str
+    end_date: str
+    description: Optional[str] = None
+    alert_type_names: List[str] = field(default_factory=list)
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "MaintenanceWindow":
+        return cls(
+            id=data.get("id", ""),
+            group_id=data.get("groupId", ""),
+            start_date=data.get("startDate", ""),
+            end_date=data.get("endDate", ""),
+            description=data.get("description"),
+            alert_type_names=data.get("alertTypeNames", []),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class LogCollectionJob:
+    """A log collection job."""
+    id: str
+    group_id: str
+    resource_type: str
+    resource_name: str
+    size_requested_per_file_bytes: int = 0
+    status: str = ""
+    creation_date: Optional[str] = None
+    expiration_date: Optional[str] = None
+    log_types: List[str] = field(default_factory=list)
+    download_url: Optional[str] = None
+    child_jobs: List[Dict[str, Any]] = field(default_factory=list)
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "LogCollectionJob":
+        return cls(
+            id=data.get("id", ""),
+            group_id=data.get("groupId", ""),
+            resource_type=data.get("resourceType", ""),
+            resource_name=data.get("resourceName", ""),
+            size_requested_per_file_bytes=data.get("sizeRequestedPerFileBytes", 0),
+            status=data.get("status", ""),
+            creation_date=data.get("creationDate"),
+            expiration_date=data.get("expirationDate"),
+            log_types=data.get("logTypes", []),
+            download_url=data.get("downloadUrl"),
+            child_jobs=data.get("childJobs", []),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class BackupConfig:
+    """Backup configuration for a cluster."""
+    cluster_id: str
+    group_id: str
+    status_name: str = ""
+    storage_engine_name: str = ""
+    auth_mechanism_name: str = ""
+    encryption_enabled: bool = False
+    ssl_enabled: bool = False
+    excluded_namespaces: List[str] = field(default_factory=list)
+    sync_source_cluster_id: Optional[str] = None
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BackupConfig":
+        return cls(
+            cluster_id=data.get("clusterId", ""),
+            group_id=data.get("groupId", ""),
+            status_name=data.get("statusName", ""),
+            storage_engine_name=data.get("storageEngineName", ""),
+            auth_mechanism_name=data.get("authMechanismName", ""),
+            encryption_enabled=data.get("encryptionEnabled", False),
+            ssl_enabled=data.get("sslEnabled", False),
+            excluded_namespaces=data.get("excludedNamespaces", []),
+            sync_source_cluster_id=data.get("syncSourceClusterId"),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class SnapshotSchedule:
+    """Snapshot retention schedule for a cluster."""
+    cluster_id: str
+    group_id: str
+    reference_hour_of_day: int = 0
+    reference_minute_of_hour: int = 0
+    snapshot_interval_hours: int = 6
+    snapshot_retention_days: int = 2
+    daily_snapshot_retention_days: int = 7
+    weekly_snapshot_retention_weeks: int = 4
+    monthly_snapshot_retention_months: int = 13
+    point_in_time_window_hours: int = 0
+    reference_time_zone_offset: str = "+00:00"
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "SnapshotSchedule":
+        return cls(
+            cluster_id=data.get("clusterId", ""),
+            group_id=data.get("groupId", ""),
+            reference_hour_of_day=data.get("referenceHourOfDay", 0),
+            reference_minute_of_hour=data.get("referenceMinuteOfHour", 0),
+            snapshot_interval_hours=data.get("snapshotIntervalHours", 6),
+            snapshot_retention_days=data.get("snapshotRetentionDays", 2),
+            daily_snapshot_retention_days=data.get("dailySnapshotRetentionDays", 7),
+            weekly_snapshot_retention_weeks=data.get("weeklySnapshotRetentionWeeks", 4),
+            monthly_snapshot_retention_months=data.get(
+                "monthlySnapshotRetentionMonths", 13
+            ),
+            point_in_time_window_hours=data.get("pointInTimeWindowHours", 0),
+            reference_time_zone_offset=data.get("referenceTimeZoneOffset", "+00:00"),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class RestoreJob:
+    """A continuous backup restore job."""
+    id: str
+    cluster_id: str
+    cluster_name: str
+    group_id: str
+    status_name: str = ""
+    delivery_type: str = ""
+    delivery_url: Optional[str] = None
+    snapshot_id: Optional[str] = None
+    created: Optional[str] = None
+    finished: Optional[str] = None
+    point_in_time: Optional[int] = None
+    timestamp: Optional[Dict[str, Any]] = None
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "RestoreJob":
+        return cls(
+            id=data.get("id", ""),
+            cluster_id=data.get("clusterId", ""),
+            cluster_name=data.get("clusterName", ""),
+            group_id=data.get("groupId", ""),
+            status_name=data.get("statusName", ""),
+            delivery_type=data.get("deliveryType", ""),
+            delivery_url=data.get("deliveryUrl"),
+            snapshot_id=data.get("snapshotId"),
+            created=data.get("created"),
+            finished=data.get("finished"),
+            point_in_time=data.get("pointInTime"),
+            timestamp=data.get("timestamp"),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class Checkpoint:
+    """A backup checkpoint for a sharded cluster."""
+    id: str
+    cluster_id: str
+    group_id: str
+    completed: Optional[str] = None
+    created: Optional[str] = None
+    timestamp: Optional[Dict[str, Any]] = None
+    replica_set_checkpoints: List[Dict[str, Any]] = field(default_factory=list)
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Checkpoint":
+        return cls(
+            id=data.get("id", ""),
+            cluster_id=data.get("clusterId", ""),
+            group_id=data.get("groupId", ""),
+            completed=data.get("completed"),
+            created=data.get("created"),
+            timestamp=data.get("timestamp"),
+            replica_set_checkpoints=data.get("parts", []),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class ServerType:
+    """Server type classification for usage reporting."""
+    name: str
+    label: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ServerType":
+        return cls(
+            name=data.get("name", ""),
+            label=data.get("label", ""),
+        )
+
+
+@dataclass
+class HostAssignment:
+    """A host assignment record for server usage reporting."""
+    hostname: str = ""
+    mem_size_mb: int = 0
+    group_id: Optional[str] = None
+    org_id: Optional[str] = None
+    server_type: Optional[ServerType] = None
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "HostAssignment":
+        st = data.get("serverType")
+        return cls(
+            hostname=data.get("hostname", ""),
+            mem_size_mb=data.get("memSizeMB", 0),
+            group_id=data.get("groupId"),
+            org_id=data.get("orgId"),
+            server_type=ServerType.from_dict(st) if st else None,
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class Team:
+    """An Ops Manager team within an organization."""
+    id: str
+    name: str
+    org_id: Optional[str] = None
+    usernames: List[str] = field(default_factory=list)
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "Team":
+        return cls(
+            id=data.get("id", ""),
+            name=data.get("name", ""),
+            org_id=data.get("orgId"),
+            usernames=data.get("usernames", []),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class User:
+    """An Ops Manager user."""
+    id: str
+    username: str
+    email_address: str
+    first_name: str = ""
+    last_name: str = ""
+    mobile_number: Optional[str] = None
+    country: Optional[str] = None
+    created: Optional[str] = None
+    roles: List[Dict[str, Any]] = field(default_factory=list)
+    team_ids: List[str] = field(default_factory=list)
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "User":
+        return cls(
+            id=data.get("id", ""),
+            username=data.get("username", ""),
+            email_address=data.get("emailAddress", ""),
+            first_name=data.get("firstName", ""),
+            last_name=data.get("lastName", ""),
+            mobile_number=data.get("mobileNumber"),
+            country=data.get("country"),
+            created=data.get("created"),
+            roles=data.get("roles", []),
+            team_ids=data.get("teamIds", []),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+    @property
+    def full_name(self) -> str:
+        """Return first + last name."""
+        return f"{self.first_name} {self.last_name}".strip()
+
+
+@dataclass
+class APIKey:
+    """An Ops Manager API key."""
+    id: str
+    public_key: str
+    desc: str = ""
+    private_key: Optional[str] = None
+    roles: List[Dict[str, Any]] = field(default_factory=list)
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "APIKey":
+        return cls(
+            id=data.get("id", ""),
+            public_key=data.get("publicKey", ""),
+            desc=data.get("desc", ""),
+            private_key=data.get("privateKey"),
+            roles=data.get("roles", []),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class AgentAPIKey:
+    """An agent API key for a project."""
+    id: str
+    agent_api_key: str
+    desc: str = ""
+    created_ip_addr: str = ""
+    created_user_id: str = ""
+    created_by: str = ""
+    created: Optional[str] = None
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentAPIKey":
+        return cls(
+            id=data.get("_id", data.get("id", "")),
+            agent_api_key=data.get("agentApiKey", ""),
+            desc=data.get("desc", ""),
+            created_ip_addr=data.get("createdIpAddr", ""),
+            created_user_id=data.get("createdUserId", ""),
+            created_by=data.get("createdBy", ""),
+            created=data.get("created"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class AgentVersions:
+    """Agent version information for a project."""
+    count: int = 0
+    is_any_agent_not_managed: bool = False
+    is_any_agent_version_deprecated: bool = False
+    is_any_agent_version_old: bool = False
+    automation_agent_version: Optional[str] = None
+    bi_connector_version: Optional[str] = None
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AgentVersions":
+        return cls(
+            count=data.get("count", 0),
+            is_any_agent_not_managed=data.get("isAnyAgentNotManaged", False),
+            is_any_agent_version_deprecated=data.get(
+                "isAnyAgentVersionDeprecated", False
+            ),
+            is_any_agent_version_old=data.get("isAnyAgentVersionOld", False),
+            automation_agent_version=data.get("automationAgentVersion"),
+            bi_connector_version=data.get("biConnectorVersion"),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class FeaturePolicy:
+    """Feature control policy configuration for a project."""
+    external_management_system: Optional[Dict[str, Any]] = None
+    policies: List[Dict[str, Any]] = field(default_factory=list)
+    links: List[Link] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FeaturePolicy":
+        return cls(
+            external_management_system=data.get("externalManagementSystem"),
+            policies=data.get("policies", []),
+            links=[Link.from_dict(l) for l in data.get("links", [])],
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class ConnectionStatus:
+    """Live data migration connection status for an organization."""
+    status: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ConnectionStatus":
+        return cls(
+            status=data.get("status", ""),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class AdminBackupConfig:
+    """Base configuration for admin backup stores."""
+    id: str = ""
+    uri: str = ""
+    write_concern: str = ""
+    labels: List[str] = field(default_factory=list)
+    ssl: bool = False
+    assignment_enabled: bool = False
+    encrypted_credentials: bool = False
+    used_size: int = 0
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "AdminBackupConfig":
+        return cls(
+            id=data.get("id", ""),
+            uri=data.get("uri", ""),
+            write_concern=data.get("writeConcern", ""),
+            labels=data.get("labels", []),
+            ssl=data.get("ssl", False),
+            assignment_enabled=data.get("assignmentEnabled", False),
+            encrypted_credentials=data.get("encryptedCredentials", False),
+            used_size=data.get("usedSize", 0),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class BackupStore:
+    """MongoDB backup store (blockstore, oplog, or sync)."""
+    id: str = ""
+    uri: str = ""
+    write_concern: str = ""
+    labels: List[str] = field(default_factory=list)
+    ssl: bool = False
+    assignment_enabled: bool = False
+    encrypted_credentials: bool = False
+    used_size: int = 0
+    load_factor: int = 0
+    max_capacity_gb: int = 0
+    provisioned: bool = False
+    sync_source: str = ""
+    username: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "BackupStore":
+        return cls(
+            id=data.get("id", ""),
+            uri=data.get("uri", ""),
+            write_concern=data.get("writeConcern", ""),
+            labels=data.get("labels", []),
+            ssl=data.get("ssl", False),
+            assignment_enabled=data.get("assignmentEnabled", False),
+            encrypted_credentials=data.get("encryptedCredentials", False),
+            used_size=data.get("usedSize", 0),
+            load_factor=data.get("loadFactor", 0),
+            max_capacity_gb=data.get("maxCapacityGB", 0),
+            provisioned=data.get("provisioned", False),
+            sync_source=data.get("syncSource", ""),
+            username=data.get("username", ""),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class S3BlockstoreConfig:
+    """S3-compatible backup blockstore configuration."""
+    id: str = ""
+    uri: str = ""
+    write_concern: str = ""
+    labels: List[str] = field(default_factory=list)
+    ssl: bool = False
+    assignment_enabled: bool = False
+    encrypted_credentials: bool = False
+    used_size: int = 0
+    load_factor: int = 0
+    max_capacity_gb: int = 0
+    provisioned: bool = False
+    sync_source: str = ""
+    username: str = ""
+    aws_access_key: str = ""
+    s3_auth_method: str = ""
+    s3_bucket_endpoint: str = ""
+    s3_bucket_name: str = ""
+    s3_max_connections: int = 0
+    disable_proxy_s3: bool = False
+    accepted_tos: bool = False
+    sse_enabled: bool = False
+    path_style_access_enabled: bool = False
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "S3BlockstoreConfig":
+        return cls(
+            id=data.get("id", ""),
+            uri=data.get("uri", ""),
+            write_concern=data.get("writeConcern", ""),
+            labels=data.get("labels", []),
+            ssl=data.get("ssl", False),
+            assignment_enabled=data.get("assignmentEnabled", False),
+            encrypted_credentials=data.get("encryptedCredentials", False),
+            used_size=data.get("usedSize", 0),
+            load_factor=data.get("loadFactor", 0),
+            max_capacity_gb=data.get("maxCapacityGB", 0),
+            provisioned=data.get("provisioned", False),
+            sync_source=data.get("syncSource", ""),
+            username=data.get("username", ""),
+            aws_access_key=data.get("awsAccessKey", ""),
+            s3_auth_method=data.get("s3AuthMethod", ""),
+            s3_bucket_endpoint=data.get("s3BucketEndpoint", ""),
+            s3_bucket_name=data.get("s3BucketName", ""),
+            s3_max_connections=data.get("s3MaxConnections", 0),
+            disable_proxy_s3=data.get("disableProxyS3", False),
+            accepted_tos=data.get("acceptedTos", False),
+            sse_enabled=data.get("sseEnabled", False),
+            path_style_access_enabled=data.get("pathStyleAccessEnabled", False),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class FileSystemStoreConfig:
+    """File system backup store configuration."""
+    id: str = ""
+    uri: str = ""
+    write_concern: str = ""
+    labels: List[str] = field(default_factory=list)
+    ssl: bool = False
+    assignment_enabled: bool = False
+    encrypted_credentials: bool = False
+    used_size: int = 0
+    load_factor: int = 0
+    max_capacity_gb: int = 0
+    provisioned: bool = False
+    sync_source: str = ""
+    username: str = ""
+    mmapv1_compression_setting: str = ""
+    store_path: str = ""
+    wt_compression_setting: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "FileSystemStoreConfig":
+        return cls(
+            id=data.get("id", ""),
+            uri=data.get("uri", ""),
+            write_concern=data.get("writeConcern", ""),
+            labels=data.get("labels", []),
+            ssl=data.get("ssl", False),
+            assignment_enabled=data.get("assignmentEnabled", False),
+            encrypted_credentials=data.get("encryptedCredentials", False),
+            used_size=data.get("usedSize", 0),
+            load_factor=data.get("loadFactor", 0),
+            max_capacity_gb=data.get("maxCapacityGB", 0),
+            provisioned=data.get("provisioned", False),
+            sync_source=data.get("syncSource", ""),
+            username=data.get("username", ""),
+            mmapv1_compression_setting=data.get("mmapv1CompressionSetting", ""),
+            store_path=data.get("storePath", ""),
+            wt_compression_setting=data.get("wtCompressionSetting", ""),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class DaemonConfig:
+    """Backup daemon configuration."""
+    id: str = ""
+    uri: str = ""
+    write_concern: str = ""
+    labels: List[str] = field(default_factory=list)
+    ssl: bool = False
+    assignment_enabled: bool = False
+    encrypted_credentials: bool = False
+    used_size: int = 0
+    backup_jobs_enabled: bool = False
+    configured: bool = False
+    garbage_collection_enabled: bool = False
+    resource_usage_enabled: bool = False
+    restore_queryable_jobs_enabled: bool = False
+    head_disk_type: str = ""
+    num_workers: int = 0
+    machine: str = ""
+    head_root_directory: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "DaemonConfig":
+        machine_data = data.get("machine", {})
+        return cls(
+            id=data.get("id", ""),
+            uri=data.get("uri", ""),
+            write_concern=data.get("writeConcern", ""),
+            labels=data.get("labels", []),
+            ssl=data.get("ssl", False),
+            assignment_enabled=data.get("assignmentEnabled", False),
+            encrypted_credentials=data.get("encryptedCredentials", False),
+            used_size=data.get("usedSize", 0),
+            backup_jobs_enabled=data.get("backupJobsEnabled", False),
+            configured=data.get("configured", False),
+            garbage_collection_enabled=data.get("garbageCollectionEnabled", False),
+            resource_usage_enabled=data.get("resourceUsageEnabled", False),
+            restore_queryable_jobs_enabled=data.get("restoreQueryableJobsEnabled", False),
+            head_disk_type=data.get("headDiskType", ""),
+            num_workers=data.get("numWorkers", 0),
+            machine=machine_data.get("machine", "") if isinstance(machine_data, dict) else str(machine_data),
+            head_root_directory=machine_data.get("headRootDirectory", "") if isinstance(machine_data, dict) else "",
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class ProjectJobConfig:
+    """Admin backup project job configuration."""
+    id: str = ""
+    uri: str = ""
+    write_concern: str = ""
+    labels: List[str] = field(default_factory=list)
+    ssl: bool = False
+    assignment_enabled: bool = False
+    encrypted_credentials: bool = False
+    used_size: int = 0
+    kmip_client_cert_path: str = ""
+    label_filter: List[str] = field(default_factory=list)
+    sync_store_filter: List[str] = field(default_factory=list)
+    daemon_filter: List[str] = field(default_factory=list)
+    oplog_store_filter: List[str] = field(default_factory=list)
+    snapshot_store_filter: List[str] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "ProjectJobConfig":
+        return cls(
+            id=data.get("id", ""),
+            uri=data.get("uri", ""),
+            write_concern=data.get("writeConcern", ""),
+            labels=data.get("labels", []),
+            ssl=data.get("ssl", False),
+            assignment_enabled=data.get("assignmentEnabled", False),
+            encrypted_credentials=data.get("encryptedCredentials", False),
+            used_size=data.get("usedSize", 0),
+            kmip_client_cert_path=data.get("kmipClientCertPath", ""),
+            label_filter=data.get("labelFilter", []),
+            sync_store_filter=data.get("syncStoreFilter", []),
+            daemon_filter=data.get("daemonFilter", []),
+            oplog_store_filter=data.get("oplogStoreFilter", []),
+            snapshot_store_filter=data.get("snapshotStoreFilter", []),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class GlobalWhitelistAPIKey:
+    """Global API key whitelist entry (IP access list)."""
+    id: str = ""
+    cidr_block: str = ""
+    created: str = ""
+    description: str = ""
+    type: str = ""
+    updated: str = ""
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> "GlobalWhitelistAPIKey":
+        return cls(
+            id=data.get("id", ""),
+            cidr_block=data.get("cidrBlock", ""),
+            created=data.get("created", ""),
+            description=data.get("description", ""),
+            type=data.get("type", ""),
+            updated=data.get("updated", ""),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return asdict(self)
+
+
 # Type alias for paginated results
 @dataclass
 class PaginatedResult:

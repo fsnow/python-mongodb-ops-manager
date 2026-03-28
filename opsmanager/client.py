@@ -29,8 +29,24 @@ from opsmanager.services.deployments import DeploymentsService
 from opsmanager.services.measurements import MeasurementsService
 from opsmanager.services.performance_advisor import PerformanceAdvisorService
 from opsmanager.services.alerts import AlertsService
+from opsmanager.services.alert_configurations import AlertConfigurationsService
+from opsmanager.services.global_alerts import GlobalAlertsService
 from opsmanager.services.agents import AgentsService
 from opsmanager.services.backup import BackupService
+from opsmanager.services.automation import AutomationService
+from opsmanager.services.events import EventsService
+from opsmanager.services.diagnostics import DiagnosticsService
+from opsmanager.services.maintenance_windows import MaintenanceWindowsService
+from opsmanager.services.log_collection import LogCollectionService
+from opsmanager.services.server_usage import ServerUsageService
+from opsmanager.services.feature_control import FeatureControlService
+from opsmanager.services.teams import TeamsService
+from opsmanager.services.users import UsersService
+from opsmanager.services.api_keys import APIKeysService
+from opsmanager.services.version import VersionService
+from opsmanager.services.live_migration import LiveMigrationService
+from opsmanager.services.admin_backup_stores import AdminBackupStoresService
+from opsmanager.services.global_admin import GlobalAdminService
 
 
 class OpsManagerClient:
@@ -52,10 +68,10 @@ class OpsManagerClient:
         # Use services
         projects = client.projects.list()
         hosts = client.deployments.list_hosts(project_id="abc123")
-        metrics = client.measurements.host(
+        events = client.events.list_project_events(
             project_id="abc123",
-            host_id="host123",
-            period="P1D",
+            min_date="2026-01-01T00:00:00Z",
+            max_date="2026-03-31T23:59:59Z",
         )
 
         # Close when done
@@ -72,9 +88,25 @@ class OpsManagerClient:
         deployments: Service for hosts, databases, and disks.
         measurements: Service for time-series metrics.
         performance_advisor: Service for slow query analysis and index suggestions.
-        alerts: Service for alert management.
+        alerts: Service for alert instances.
+        alert_configurations: Service for alert configuration rules.
+        global_alerts: Service for global (cross-project) alerts.
         agents: Service for monitoring, backup, and automation agent status.
-        backup: Service for backup snapshots and configuration.
+        backup: Service for backup snapshots, configs, restore jobs, and checkpoints.
+        automation: Service for automation config and status.
+        events: Service for the audit event log.
+        diagnostics: Service for diagnostic archive downloads.
+        maintenance_windows: Service for scheduled maintenance windows.
+        log_collection: Service for log collection jobs and downloads.
+        server_usage: Service for license/capacity reporting.
+        feature_control: Service for feature control policies.
+        teams: Service for organization teams.
+        users: Service for user lookup.
+        api_keys: Service for API key inventory.
+        version: Service for Ops Manager and MongoDB version information.
+        live_migration: Service for live data migration connection status.
+        admin_backup_stores: Service for admin backup store configurations.
+        global_admin: Service for global admin API keys and IP whitelist.
     """
 
     # Default base URL for Cloud Manager (Ops Manager URL must be provided)
@@ -127,7 +159,7 @@ class OpsManagerClient:
             user_agent=user_agent,
         )
 
-        # Initialize services
+        # Initialize services — existing
         self._organizations = OrganizationsService(self._session)
         self._projects = ProjectsService(self._session)
         self._clusters = ClustersService(self._session)
@@ -137,6 +169,26 @@ class OpsManagerClient:
         self._alerts = AlertsService(self._session)
         self._agents = AgentsService(self._session)
         self._backup = BackupService(self._session)
+
+        # Initialize services — new
+        self._alert_configurations = AlertConfigurationsService(self._session)
+        self._global_alerts = GlobalAlertsService(self._session)
+        self._automation = AutomationService(self._session)
+        self._events = EventsService(self._session)
+        self._diagnostics = DiagnosticsService(self._session)
+        self._maintenance_windows = MaintenanceWindowsService(self._session)
+        self._log_collection = LogCollectionService(self._session)
+        self._server_usage = ServerUsageService(self._session)
+        self._feature_control = FeatureControlService(self._session)
+        self._teams = TeamsService(self._session)
+        self._users = UsersService(self._session)
+        self._api_keys = APIKeysService(self._session)
+        self._version = VersionService(self._session)
+        self._live_migration = LiveMigrationService(self._session)
+        self._admin_backup_stores = AdminBackupStoresService(self._session)
+        self._global_admin = GlobalAdminService(self._session)
+
+    # --- Existing services ---
 
     @property
     def organizations(self) -> OrganizationsService:
@@ -170,7 +222,7 @@ class OpsManagerClient:
 
     @property
     def alerts(self) -> AlertsService:
-        """Service for alert management."""
+        """Service for alert instances."""
         return self._alerts
 
     @property
@@ -180,8 +232,92 @@ class OpsManagerClient:
 
     @property
     def backup(self) -> BackupService:
-        """Service for backup snapshots and configuration."""
+        """Service for backup snapshots, configs, restore jobs, and checkpoints."""
         return self._backup
+
+    # --- New services ---
+
+    @property
+    def alert_configurations(self) -> AlertConfigurationsService:
+        """Service for alert configuration rules (policies that define when alerts fire)."""
+        return self._alert_configurations
+
+    @property
+    def global_alerts(self) -> GlobalAlertsService:
+        """Service for global alerts spanning all projects."""
+        return self._global_alerts
+
+    @property
+    def automation(self) -> AutomationService:
+        """Service for automation config and convergence status."""
+        return self._automation
+
+    @property
+    def events(self) -> EventsService:
+        """Service for the audit event log (org and project level)."""
+        return self._events
+
+    @property
+    def diagnostics(self) -> DiagnosticsService:
+        """Service for downloading diagnostic archives."""
+        return self._diagnostics
+
+    @property
+    def maintenance_windows(self) -> MaintenanceWindowsService:
+        """Service for scheduled maintenance windows."""
+        return self._maintenance_windows
+
+    @property
+    def log_collection(self) -> LogCollectionService:
+        """Service for log collection jobs and log downloads."""
+        return self._log_collection
+
+    @property
+    def server_usage(self) -> ServerUsageService:
+        """Service for license and capacity reporting."""
+        return self._server_usage
+
+    @property
+    def feature_control(self) -> FeatureControlService:
+        """Service for feature control policies."""
+        return self._feature_control
+
+    @property
+    def teams(self) -> TeamsService:
+        """Service for organization teams."""
+        return self._teams
+
+    @property
+    def users(self) -> UsersService:
+        """Service for user lookup by ID or username."""
+        return self._users
+
+    @property
+    def api_keys(self) -> APIKeysService:
+        """Service for API key inventory (org and project level)."""
+        return self._api_keys
+
+    @property
+    def version(self) -> VersionService:
+        """Service for Ops Manager and MongoDB version information."""
+        return self._version
+
+    @property
+    def live_migration(self) -> LiveMigrationService:
+        """Service for live data migration connection status."""
+        return self._live_migration
+
+    @property
+    def admin_backup_stores(self) -> AdminBackupStoresService:
+        """Service for admin backup store configurations (blockstore, S3, filesystem, oplog, sync, daemon, project jobs)."""
+        return self._admin_backup_stores
+
+    @property
+    def global_admin(self) -> GlobalAdminService:
+        """Service for global admin API keys and IP whitelist."""
+        return self._global_admin
+
+    # --- Client utilities ---
 
     def set_rate_limit(self, rate: float) -> None:
         """Update the rate limit for API requests.

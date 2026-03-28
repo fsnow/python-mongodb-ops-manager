@@ -21,47 +21,10 @@ This is critical for health check reporting and performance analysis.
 See: https://docs.opsmanager.mongodb.com/current/reference/api/measurements/
 """
 
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Union
 
 from opsmanager.services.base import BaseService
 from opsmanager.types import ProcessMeasurements, Measurement
-
-
-@dataclass
-class MeasurementOptions:
-    """Options for measurement queries.
-
-    Attributes:
-        granularity: Duration that specifies the interval at which to report
-            the metrics. Must be an ISO 8601 duration (e.g., "PT1M" for 1 minute,
-            "PT1H" for 1 hour).
-        period: Duration over which to report the metrics. Must be an ISO 8601
-            duration (e.g., "P1D" for 1 day, "P7D" for 7 days).
-        start: Start of the period (ISO 8601 timestamp). Mutually exclusive with period.
-        end: End of the period (ISO 8601 timestamp). Mutually exclusive with period.
-        metrics: List of metric names to retrieve.
-    """
-    granularity: str = "PT1M"  # 1 minute default
-    period: Optional[str] = None  # e.g., "P1D" for 1 day
-    start: Optional[str] = None
-    end: Optional[str] = None
-    metrics: Optional[List[str]] = None
-
-    def to_params(self) -> Dict[str, Any]:
-        """Convert to API query parameters."""
-        params = {
-            "granularity": self.granularity,
-        }
-        if self.period:
-            params["period"] = self.period
-        if self.start:
-            params["start"] = self.start
-        if self.end:
-            params["end"] = self.end
-        if self.metrics:
-            params["m"] = self.metrics
-        return params
 
 
 class MeasurementsService(BaseService):
@@ -216,6 +179,11 @@ class MeasurementsService(BaseService):
                 metrics=["OPCOUNTER_QUERY", "OPCOUNTER_INSERT"],
             )
         """
+        if period and (start or end):
+            raise ValueError("period and start/end are mutually exclusive")
+        if bool(start) != bool(end):
+            raise ValueError("start and end must both be provided")
+
         params = {"granularity": granularity}
 
         if period:
@@ -263,6 +231,11 @@ class MeasurementsService(BaseService):
         Returns:
             Measurement data.
         """
+        if period and (start or end):
+            raise ValueError("period and start/end are mutually exclusive")
+        if bool(start) != bool(end):
+            raise ValueError("start and end must both be provided")
+
         params = {"granularity": granularity}
 
         if period:
@@ -309,6 +282,11 @@ class MeasurementsService(BaseService):
         Returns:
             Measurement data.
         """
+        if period and (start or end):
+            raise ValueError("period and start/end are mutually exclusive")
+        if bool(start) != bool(end):
+            raise ValueError("start and end must both be provided")
+
         params = {"granularity": granularity}
 
         if period:

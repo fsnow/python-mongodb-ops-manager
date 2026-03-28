@@ -21,7 +21,7 @@ See: https://docs.opsmanager.mongodb.com/current/reference/api/organizations/
 from typing import Any, Dict, Iterator, List, Optional
 
 from opsmanager.services.base import BaseService
-from opsmanager.types import Organization, Project
+from opsmanager.types import Organization, Project, User
 from opsmanager.pagination import PageIterator
 
 
@@ -131,5 +131,30 @@ class OrganizationsService(BaseService):
         return self._paginate(
             path=f"orgs/{org_id}/groups",
             item_type=Project if as_obj else None,
+            items_per_page=items_per_page,
+        )
+
+    def list_users(
+        self,
+        org_id: str,
+        items_per_page: int = 100,
+        as_obj: bool = True,
+    ) -> List[User]:
+        """Get all users in an organization.
+
+        Returns all users who have access to this organization. Essential for
+        periodic access control reviews required by banking regulators.
+
+        Args:
+            org_id: Organization ID.
+            items_per_page: Number of items per page.
+            as_obj: Return User objects if True, dicts if False.
+
+        Returns:
+            List of users.
+        """
+        return self._fetch_all(
+            path=f"orgs/{org_id}/users",
+            item_type=User if as_obj else None,
             items_per_page=items_per_page,
         )
