@@ -805,14 +805,21 @@ class MaintenanceWindow:
 @dataclass
 class LogCollectionJob:
     """A log collection job."""
-    id: str
-    group_id: str
-    resource_type: str
-    resource_name: str
+    id: str = ""
+    group_id: str = ""
+    user_id: str = ""
+    resource_type: str = ""
+    resource_name: str = ""
+    root_resource_name: str = ""
+    root_resource_type: str = ""
     size_requested_per_file_bytes: int = 0
+    uncompressed_size_total_bytes: int = 0
     status: str = ""
     creation_date: Optional[str] = None
     expiration_date: Optional[str] = None
+    log_collection_from_date: Optional[int] = None
+    log_collection_to_date: Optional[int] = None
+    redacted: Optional[bool] = None
     log_types: List[str] = field(default_factory=list)
     download_url: Optional[str] = None
     child_jobs: List[Dict[str, Any]] = field(default_factory=list)
@@ -823,12 +830,19 @@ class LogCollectionJob:
         return cls(
             id=data.get("id", ""),
             group_id=data.get("groupId", ""),
+            user_id=data.get("userId", ""),
             resource_type=data.get("resourceType", ""),
             resource_name=data.get("resourceName", ""),
+            root_resource_name=data.get("rootResourceName", ""),
+            root_resource_type=data.get("rootResourceType", ""),
             size_requested_per_file_bytes=data.get("sizeRequestedPerFileBytes", 0),
+            uncompressed_size_total_bytes=data.get("uncompressedSizeTotalBytes", 0),
             status=data.get("status", ""),
             creation_date=data.get("creationDate"),
             expiration_date=data.get("expirationDate"),
+            log_collection_from_date=data.get("logCollectionFromDate"),
+            log_collection_to_date=data.get("logCollectionToDate"),
+            redacted=data.get("redacted"),
             log_types=data.get("logTypes", []),
             download_url=data.get("downloadUrl"),
             child_jobs=data.get("childJobs", []),

@@ -15,12 +15,9 @@
 """
 Log collection service for MongoDB Ops Manager API.
 
-Provides read access to log collection jobs and the ability to download
-collected logs. Log collection jobs gather MongoDB process logs from
-monitored hosts into a downloadable archive.
-
-Critical for forensic investigation, compliance evidence, and incident
-root cause analysis at regulated institutions.
+Provides access to log collection jobs: creating, extending, retrying,
+and deleting jobs, as well as listing, getting, and downloading collected
+log archives.
 
 See: https://www.mongodb.com/docs/ops-manager/current/reference/api/log-collection/
 """
@@ -33,25 +30,28 @@ from opsmanager.pagination import PageIterator
 
 
 class LogCollectionService(BaseService):
-    """Service for reading log collection jobs and downloading collected logs.
+    """Service for managing log collection jobs and downloading collected logs.
 
-    Log collection jobs are managed tasks that gather MongoDB process logs
-    from all hosts in a project into a downloadable archive. Use this service
-    to check job status, enumerate available log archives, and download them.
-
-    Downloaded logs are returned as raw gzip-compressed bytes:
+    Log collection jobs gather MongoDB process logs from all hosts in a
+    project into a downloadable gzip archive.
 
     Example::
 
-        jobs = client.log_collection.list(project_id="abc123")
-        for job in jobs:
-            if job.status == "SUCCESS":
-                log_bytes = client.log_collection.download(
-                    project_id="abc123",
-                    job_id=job.id,
-                )
-                with open(f"logs_{job.id}.gz", "wb") as f:
-                    f.write(log_bytes)
+        # Create a job, wait for completion, then download
+        job = client.log_collection.create(
+            project_id="abc123",
+            resource_type="REPLICASET",
+            resource_name="rs0",
+            log_types=["MONGODB"],
+            size_requested_per_file_bytes=1000000,
+        )
+        # ... poll job.status until "SUCCESS" ...
+        log_bytes = client.log_collection.download(
+            project_id="abc123",
+            job_id=job.id,
+        )
+        with open(f"logs_{job.id}.gz", "wb") as f:
+            f.write(log_bytes)
     """
 
     def list(
@@ -157,3 +157,111 @@ class LogCollectionService(BaseService):
         return self._download(
             f"groups/{project_id}/logCollectionJobs/{job_id}/download"
         )
+
+    def create(
+        self,
+        project_id: str,
+        resource_type: str,
+        resource_name: str,
+        log_types: Optional[List[str]] = None,
+        size_requested_per_file_bytes: Optional[int] = None,
+        log_collection_from_date: Optional[int] = None,
+        log_collection_to_date: Optional[int] = None,
+        redacted: Optional[bool] = None,
+        as_obj: bool = True,
+    ) -> LogCollectionJob:
+        """Create a new log collection job.
+
+        Submits a request to collect MongoDB process logs from the specified
+        resource (cluster, replica set, or host). Poll the returned job's
+        ``status`` field until it reaches ``"SUCCESS"`` before downloading.
+
+        Args:
+            project_id: Project (group) ID.
+            resource_type: Type of resource — ``"REPLICASET"``, ``"CLUSTER"``,
+                or ``"PROCESS"``.
+            resource_name: Name of the resource to collect logs from.
+            log_types: Log types to collect (e.g. ``["MONGODB", "AUTOMATION_AGENT"]``).
+                Defaults to all available types if omitted.
+            size_requested_per_file_bytes: Maximum bytes per log file.
+            log_collection_from_date: Start of log collection window
+                (milliseconds since Unix epoch).
+            log_collection_to_date: End of log collection window
+                (milliseconds since Unix epoch).
+            redacted: If True, redact IP addresses and hostnames in logs.
+            as_obj: Return LogCollectionJob object if True, dict if False.
+
+        Returns:
+            The created log collection job.
+        """
+        body: Dict[str, Any] = {
+            "resourceType": resource_type,
+            "resourceName": resource_name,
+        }
+        if log_types is not None:
+            body["logTypes"] = log_types
+        if size_requested_per_file_bytes is not None:
+            body["sizeRequestedPerFileBytes"] = size_requested_per_file_bytes
+        if log_collection_from_date is not None:
+            body["logCollectionFromDate"] = log_collection_from_date
+        if log_collection_to_date is not None:
+            body["logCollectionToDate"] = log_collection_to_date
+        if redacted is not None:
+            body["redacted"] = redacted
+
+        response = self._post(f"groups/{project_id}/logCollectionJobs", json=body)
+        return LogCollectionJob.from_dict(response) if as_obj else response
+
+    def extend(
+        self,
+        project_id: str,
+        job_id: str,
+        expiration_date: str,
+    ) -> None:
+        """Extend the expiration date of a log collection job.
+
+        Pushes the expiration date forward so the collected log archive
+        remains available for download beyond its original retention window.
+
+        Args:
+            project_id: Project (group) ID.
+            job_id: Log collection job ID.
+            expiration_date: New expiration date (ISO 8601 timestamp,
+                e.g. ``"2026-04-30T00:00:00Z"``).
+        """
+        self._patch(
+            f"groups/{project_id}/logCollectionJobs/{job_id}",
+            json={"expirationDate": expiration_date},
+        )
+
+    def retry(
+        self,
+        project_id: str,
+        job_id: str,
+    ) -> None:
+        """Retry a failed log collection job.
+
+        Re-submits a job that reached ``status == "FAILED"`` so that log
+        collection is attempted again without creating a new job.
+
+        Args:
+            project_id: Project (group) ID.
+            job_id: Log collection job ID.
+        """
+        self._put(f"groups/{project_id}/logCollectionJobs/{job_id}/retry")
+
+    def delete(
+        self,
+        project_id: str,
+        job_id: str,
+    ) -> None:
+        """Delete a log collection job.
+
+        Removes the job and its associated log archive. Downloads are no
+        longer available after deletion.
+
+        Args:
+            project_id: Project (group) ID.
+            job_id: Log collection job ID.
+        """
+        self._delete(f"groups/{project_id}/logCollectionJobs/{job_id}")
