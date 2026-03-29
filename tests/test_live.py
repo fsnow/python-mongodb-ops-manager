@@ -296,9 +296,10 @@ class LiveTestRunner:
 
         # Test backup config
         try:
+            from opsmanager.types import BackupConfig
             config = self.client.backup.get_backup_config(self.project_id, cluster.id)
-            assert isinstance(config, dict), f"Expected dict, got {type(config)}"
-            self.log(f"  Backup config keys: {list(config.keys())}")
+            assert isinstance(config, BackupConfig), f"Expected BackupConfig, got {type(config)}"
+            self.log(f"  Backup config: cluster_id={config.cluster_id} status={config.status_name}")
         except Exception as e:
             if "BACKUP_NOT_ENABLED" in str(e) or "404" in str(e):
                 self.log("  (Backup not enabled for this cluster — skipping snapshots)")
