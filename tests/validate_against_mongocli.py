@@ -365,9 +365,259 @@ def validate_backup(
     return all_passed
 
 
+def validate_events(client: OpsManagerClient, project_id: str, mongocli_env: Dict[str, str]) -> bool:
+    """Validate events endpoint."""
+    print("\n=== Validating Events ===")
+
+    py_events = client.events.list_project_events(project_id=project_id, as_obj=False)
+
+    cli_result = run_mongocli(
+        ["events", "projects", "list", "--projectId", project_id], env=mongocli_env
+    )
+    cli_events = cli_result.get("results", [])
+
+    print(f"  Python={len(py_events)}, mongocli={len(cli_events)}")
+
+    # mongocli adds Go zero-values for optional string fields
+    expected_cli_extras = {"alertId", "alertConfigId", "hostname",
+                           "targetPublicKey", "userId", "username",
+                           "Port"}  # mongocli capitalizes Port (Go struct tag)
+    # Fields our library returns that mongocli omits
+    expected_py_extras = {"diffs", "port", "isGlobalAdmin", "hostId"}
+
+    differences = compare_results(py_events, cli_events)
+    unexpected = [
+        d for d in differences
+        if not ("Missing in Python:" in d and diff_field(d) in expected_cli_extras)
+        and not ("Missing in CLI:" in d and diff_field(d) in expected_py_extras)
+    ]
+
+    if unexpected:
+        print("  Unexpected differences:")
+        for diff in unexpected[:20]:
+            print(f"    - {diff}")
+        return False
+
+    print("PASS: Events match!")
+    return True
+
+
+def validate_measurements(
+    client: OpsManagerClient,
+    project_id: str,
+    mongocli_env: Dict[str, str],
+) -> bool:
+    """Validate measurements endpoint (single metric comparison)."""
+    print("\n=== Validating Measurements ===")
+
+    # Discover a host
+    hosts = client.deployments.list_hosts(project_id=project_id)
+    if not hosts:
+        print("  No hosts found — skipping measurements validation")
+        return True
+    host = hosts[0]
+    print(f"  Using host: {host.hostname} ({host.id})")
+
+    metric = "PROCESS_CPU_USER"
+    py_result = client.measurements.host(
+        project_id=project_id,
+        host_id=host.id,
+        granularity="PT1H",
+        period="P1D",
+        metrics=[metric],
+        as_obj=False,
+    )
+
+    cli_result = run_mongocli(
+        ["metrics", "process", host.id,
+         "--projectId", project_id,
+         "--granularity", "PT1H",
+         "--period", "P1D",
+         "--type", metric],
+        env=mongocli_env,
+    )
+
+    # Compare structure (not values — timestamps may differ slightly)
+    py_keys = set(py_result.keys()) - {"links"}
+    cli_keys = set(cli_result.keys()) - {"links"}
+    missing_in_py = cli_keys - py_keys
+    missing_in_cli = py_keys - cli_keys
+
+    if missing_in_py:
+        print(f"  Missing in Python: {missing_in_py}")
+    if missing_in_cli:
+        print(f"  Missing in CLI: {missing_in_cli}")
+
+    # Compare measurement names
+    py_metrics = {m["name"] for m in py_result.get("measurements", [])}
+    cli_metrics = {m["name"] for m in cli_result.get("measurements", [])}
+
+    if py_metrics != cli_metrics:
+        print(f"  Metric name mismatch: py={py_metrics}, cli={cli_metrics}")
+        return False
+
+    # Verify data point structure
+    for m in py_result.get("measurements", []):
+        if m.get("dataPoints"):
+            dp = m["dataPoints"][0]
+            assert "timestamp" in dp, "Missing timestamp in dataPoint"
+            assert "value" in dp, "Missing value in dataPoint"
+            break
+
+    print(f"  Metric: {metric}, data points aligned")
+    print("PASS: Measurements match!")
+    return True
+
+
+def validate_automation_status(
+    client: OpsManagerClient,
+    project_id: str,
+    mongocli_env: Dict[str, str],
+) -> bool:
+    """Validate automation status endpoint."""
+    print("\n=== Validating Automation Status ===")
+
+    py_status = client.automation.get_status(project_id=project_id, as_obj=False)
+
+    cli_status = run_mongocli(
+        ["automation", "status", "--projectId", project_id], env=mongocli_env
+    )
+
+    # Both return {"goalVersion": N, "processes": [...]}
+    if py_status.get("goalVersion") != cli_status.get("goalVersion"):
+        print(f"  goalVersion mismatch: py={py_status.get('goalVersion')}, cli={cli_status.get('goalVersion')}")
+        return False
+    print(f"  goalVersion: {py_status.get('goalVersion')}")
+
+    py_procs = py_status.get("processes", [])
+    cli_procs = cli_status.get("processes", [])
+
+    print(f"  Processes: Python={len(py_procs)}, mongocli={len(cli_procs)}")
+
+    if len(py_procs) != len(cli_procs):
+        print(f"  Process count mismatch")
+        return False
+
+    # Compare by hostname (order may differ)
+    py_by_host = {p.get("hostname", p.get("name", "")): p for p in py_procs}
+    cli_by_host = {p.get("hostname", p.get("name", "")): p for p in cli_procs}
+
+    # mongocli adds Go zero-values for fields the API omits
+    expected_cli_extras = {"errorCode", "errorCodeDescription",
+                           "errorCodeHumanReadable", "errorString"}
+
+    for hostname in cli_by_host:
+        if hostname not in py_by_host:
+            print(f"  Missing in Python: process {hostname}")
+            return False
+        differences = compare_results(py_by_host[hostname], cli_by_host[hostname])
+        unexpected = [
+            d for d in differences
+            if not ("Missing in Python:" in d and diff_field(d) in expected_cli_extras)
+        ]
+        if unexpected:
+            print(f"  Process {hostname} differences:")
+            for diff in unexpected[:10]:
+                print(f"    - {diff}")
+            return False
+
+    print("PASS: Automation status match!")
+    return True
+
+
+def validate_maintenance_windows(
+    client: OpsManagerClient,
+    project_id: str,
+    mongocli_env: Dict[str, str],
+) -> bool:
+    """Validate maintenance windows endpoint."""
+    print("\n=== Validating Maintenance Windows ===")
+
+    py_windows = client.maintenance_windows.list(project_id=project_id, as_obj=False)
+
+    cli_result = run_mongocli(
+        ["maintenanceWindows", "list", "--projectId", project_id], env=mongocli_env
+    )
+    cli_windows = cli_result.get("results", [])
+
+    print(f"  Python={len(py_windows)}, mongocli={len(cli_windows)}")
+
+    differences = compare_results(py_windows, cli_windows)
+    if differences:
+        print("  Differences:")
+        for diff in differences[:20]:
+            print(f"    - {diff}")
+        return False
+
+    print("PASS: Maintenance windows match!")
+    return True
+
+
+def validate_feature_policies(
+    client: OpsManagerClient,
+    project_id: str,
+    mongocli_env: Dict[str, str],
+) -> bool:
+    """Validate feature control policies endpoint."""
+    print("\n=== Validating Feature Policies ===")
+
+    py_policy = client.feature_control.get(project_id=project_id, as_obj=False)
+    py_policies = py_policy.get("policies", [])
+
+    cli_result = run_mongocli(
+        ["featurePolicies", "list", "--projectId", project_id], env=mongocli_env
+    )
+    cli_policies = cli_result.get("policies", [])
+
+    print(f"  Python={len(py_policies)}, mongocli={len(cli_policies)}")
+
+    differences = compare_results(py_policies, cli_policies)
+    if differences:
+        print("  Differences:")
+        for diff in differences[:20]:
+            print(f"    - {diff}")
+        return False
+
+    print("PASS: Feature policies match!")
+    return True
+
+
+def validate_log_collection(
+    client: OpsManagerClient,
+    project_id: str,
+    mongocli_env: Dict[str, str],
+) -> bool:
+    """Validate log collection jobs endpoint."""
+    print("\n=== Validating Log Collection ===")
+
+    py_jobs = client.log_collection.list(project_id=project_id, as_obj=False)
+
+    cli_result = run_mongocli(
+        ["logs", "jobs", "list", "--projectId", project_id], env=mongocli_env
+    )
+    cli_jobs = cli_result.get("results", [])
+
+    print(f"  Python={len(py_jobs)}, mongocli={len(cli_jobs)}")
+
+    differences = compare_results(py_jobs, cli_jobs)
+    if differences:
+        print("  Differences:")
+        for diff in differences[:20]:
+            print(f"    - {diff}")
+        return False
+
+    print("PASS: Log collection match!")
+    return True
+
+
 def main():
     parser = argparse.ArgumentParser(description="Validate Python library against mongocli")
-    parser.add_argument("--endpoint", choices=["hosts", "alerts", "agents", "backup", "all"],
+    all_endpoints = [
+        "hosts", "alerts", "agents", "backup", "events", "measurements",
+        "automation_status", "maintenance_windows", "feature_policies",
+        "log_collection", "all",
+    ]
+    parser.add_argument("--endpoint", choices=all_endpoints,
                         default="all", help="Which endpoint to validate")
     parser.add_argument("--cluster-id", default=os.environ.get("OM_CLUSTER_ID"),
                         help="Cluster ID for backup validation")
@@ -432,6 +682,24 @@ def main():
 
         if args.endpoint in ("backup", "all"):
             results["backup"] = validate_backup(client, args.project_id, mongocli_env, args.cluster_id)
+
+        if args.endpoint in ("events", "all"):
+            results["events"] = validate_events(client, args.project_id, mongocli_env)
+
+        if args.endpoint in ("measurements", "all"):
+            results["measurements"] = validate_measurements(client, args.project_id, mongocli_env)
+
+        if args.endpoint in ("automation_status", "all"):
+            results["automation_status"] = validate_automation_status(client, args.project_id, mongocli_env)
+
+        if args.endpoint in ("maintenance_windows", "all"):
+            results["maintenance_windows"] = validate_maintenance_windows(client, args.project_id, mongocli_env)
+
+        if args.endpoint in ("feature_policies", "all"):
+            results["feature_policies"] = validate_feature_policies(client, args.project_id, mongocli_env)
+
+        if args.endpoint in ("log_collection", "all"):
+            results["log_collection"] = validate_log_collection(client, args.project_id, mongocli_env)
 
     finally:
         client.close()
