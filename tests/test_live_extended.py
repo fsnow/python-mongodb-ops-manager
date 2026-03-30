@@ -213,8 +213,9 @@ class ExtendedLiveTestRunner:
             schedule = self.client.backup.get_snapshot_schedule(
                 self.project_id, self.cluster_id
             )
-            assert isinstance(schedule, dict), f"Expected dict, got {type(schedule)}"
-            self.log(f"  Snapshot schedule keys: {list(schedule.keys())[:5]}")
+            from opsmanager.types import SnapshotSchedule
+            assert isinstance(schedule, SnapshotSchedule), f"Expected SnapshotSchedule, got {type(schedule)}"
+            self.log(f"  Snapshot schedule: cluster_id={schedule.cluster_id} frequency_hours={schedule.snapshot_interval_hours}")
         except OpsManagerNotFoundError:
             self.log("  (No snapshot schedule — backup not configured)")
         except OpsManagerError as e:
@@ -351,8 +352,11 @@ class ExtendedLiveTestRunner:
             open_alerts = client.global_alerts.list_open()
             assert isinstance(open_alerts, list), f"Expected list, got {type(open_alerts)}"
             self.log(f"  Open global alerts: {len(open_alerts)}")
-        except OpsManagerForbiddenError as e:
-            self.log(f"  (Global alerts restricted by IP/permissions: {e})")
+        except (OpsManagerForbiddenError, OpsManagerError) as e:
+            if "UNAUTHORIZED" in str(e) or "403" in str(e) or "Forbidden" in str(e):
+                self.log(f"  (Global alerts restricted by permissions: {e})")
+            else:
+                raise
 
     def test_diagnostics(self) -> None:
         """Diagnostics: download archive (returns bytes)."""

@@ -314,7 +314,7 @@ def validate_backup(
 
     # Validate backup config
     try:
-        py_config = client.backup.get_backup_config(project_id, cluster_id)
+        py_config = client.backup.get_backup_config(project_id, cluster_id, as_obj=False)
         cli_config = run_mongocli(
             ["backups", "config", "describe", cluster_id, "--projectId", project_id],
             env=mongocli_env,
