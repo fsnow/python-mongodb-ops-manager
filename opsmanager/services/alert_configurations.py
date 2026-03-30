@@ -125,7 +125,7 @@ class AlertConfigurationsService(BaseService):
         response = self._get(
             f"groups/{project_id}/alertConfigs/{alert_config_id}/alerts"
         )
-        results = response.get("results", [response]) if isinstance(response, dict) else [response]
+        results = response.get("results", []) if isinstance(response, dict) else []
         if as_obj:
             return [Alert.from_dict(item) for item in results]
         return results

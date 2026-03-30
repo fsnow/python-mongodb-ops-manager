@@ -1118,7 +1118,9 @@ class APIKey:
         )
 
     def to_dict(self) -> Dict[str, Any]:
-        return asdict(self)
+        d = asdict(self)
+        d.pop("private_key", None)
+        return d
 
 
 @dataclass
