@@ -91,7 +91,7 @@ with OpsManagerClient(
 
 ## API Coverage
 
-All 25 services are read-only (GET) operations. Write operations are not implemented.
+25 services covering all read-only Ops Manager API endpoints. Log collection also supports write operations (create, extend, retry, delete).
 
 ### Infrastructure & Topology
 
@@ -141,7 +141,7 @@ All 25 services are read-only (GET) operations. Write operations are not impleme
 | Service | Methods | Description |
 |---------|---------|-------------|
 | `diagnostics` | `get` → `bytes` | Diagnostic archive download (gzip) |
-| `log_collection` | `list`, `get`, `download` → `bytes` + iter | Log collection jobs and log downloads |
+| `log_collection` | `list`, `get`, `download` → `bytes`, `create`, `extend`, `retry`, `delete` + iter | Log collection jobs — read, create, and manage |
 
 ### Maintenance
 
@@ -287,7 +287,7 @@ Modeled after the official [MongoDB Go SDK](https://github.com/mongodb/go-client
 
 ## Use Cases
 
-Primarily used with read-only API keys for monitoring and reporting:
+Primarily used for monitoring and reporting. Most operations are read-only; log collection also supports write operations:
 
 - Health check reporting across MongoDB fleets
 - Metrics collection and analysis
