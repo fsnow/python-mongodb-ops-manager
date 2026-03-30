@@ -122,6 +122,7 @@ class TeamsService(BaseService):
         self,
         org_id: str,
         team_id: str,
+        items_per_page: int = 100,
         as_obj: bool = True,
     ) -> List[User]:
         """Get all users assigned to a team.
@@ -129,13 +130,14 @@ class TeamsService(BaseService):
         Args:
             org_id: Organization ID.
             team_id: Team ID.
+            items_per_page: Number of items per page.
             as_obj: Return User objects if True, dicts if False.
 
         Returns:
             List of users in the team.
         """
-        response = self._get(f"orgs/{org_id}/teams/{team_id}/users")
-        results = response.get("results", [])
-        if as_obj:
-            return [User.from_dict(item) for item in results]
-        return results
+        return self._fetch_all(
+            path=f"orgs/{org_id}/teams/{team_id}/users",
+            item_type=User if as_obj else None,
+            items_per_page=items_per_page,
+        )

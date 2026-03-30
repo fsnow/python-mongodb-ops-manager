@@ -51,6 +51,9 @@ from opsmanager.errors import (
     OpsManagerConflictError,
     OpsManagerServerError,
     OpsManagerRateLimitError,
+    OpsManagerTimeoutError,
+    OpsManagerConnectionError,
+    OpsManagerValidationError,
 )
 
 __all__ = [
@@ -63,5 +66,8 @@ __all__ = [
     "OpsManagerConflictError",
     "OpsManagerServerError",
     "OpsManagerRateLimitError",
+    "OpsManagerTimeoutError",
+    "OpsManagerConnectionError",
+    "OpsManagerValidationError",
     "__version__",
 ]

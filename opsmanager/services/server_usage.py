@@ -57,11 +57,11 @@ class ServerUsageService(BaseService):
             List of host assignments.
         """
         params = self._build_params(start_date=start_date, end_date=end_date)
-        response = self._get("usage/assignments", params=params or None)
-        results = response.get("results", [])
-        if as_obj:
-            return [HostAssignment.from_dict(item) for item in results]
-        return results
+        return self._fetch_all(
+            path="usage/assignments",
+            item_type=HostAssignment if as_obj else None,
+            params=params or None,
+        )
 
     def get_project_host_assignments(
         self,
@@ -82,13 +82,11 @@ class ServerUsageService(BaseService):
             List of host assignments for the project.
         """
         params = self._build_params(start_date=start_date, end_date=end_date)
-        response = self._get(
-            f"usage/groups/{project_id}/hosts", params=params or None
+        return self._fetch_all(
+            path=f"usage/groups/{project_id}/hosts",
+            item_type=HostAssignment if as_obj else None,
+            params=params or None,
         )
-        results = response.get("results", [])
-        if as_obj:
-            return [HostAssignment.from_dict(item) for item in results]
-        return results
 
     def get_organization_host_assignments(
         self,
@@ -109,13 +107,11 @@ class ServerUsageService(BaseService):
             List of host assignments for the organization.
         """
         params = self._build_params(start_date=start_date, end_date=end_date)
-        response = self._get(
-            f"usage/organizations/{org_id}/hosts", params=params or None
+        return self._fetch_all(
+            path=f"usage/organizations/{org_id}/hosts",
+            item_type=HostAssignment if as_obj else None,
+            params=params or None,
         )
-        results = response.get("results", [])
-        if as_obj:
-            return [HostAssignment.from_dict(item) for item in results]
-        return results
 
     def get_project_server_type(
         self,

@@ -38,8 +38,6 @@ class VersionService(BaseService):
       reports with release dates and EOL status.
     """
 
-    # Override base path: service version uses private/unauth path
-    BASE_PATH = "api/public/v1.0"
 
     def get_service_version(self) -> Dict[str, Any]:
         """Get the running Ops Manager service version.

@@ -159,7 +159,7 @@ class OpsManagerClient:
             user_agent=user_agent,
         )
 
-        # Initialize services — existing
+        # Initialize services
         self._organizations = OrganizationsService(self._session)
         self._projects = ProjectsService(self._session)
         self._clusters = ClustersService(self._session)
@@ -170,7 +170,6 @@ class OpsManagerClient:
         self._agents = AgentsService(self._session)
         self._backup = BackupService(self._session)
 
-        # Initialize services — new
         self._alert_configurations = AlertConfigurationsService(self._session)
         self._global_alerts = GlobalAlertsService(self._session)
         self._automation = AutomationService(self._session)
@@ -187,8 +186,6 @@ class OpsManagerClient:
         self._live_migration = LiveMigrationService(self._session)
         self._admin_backup_stores = AdminBackupStoresService(self._session)
         self._global_admin = GlobalAdminService(self._session)
-
-    # --- Existing services ---
 
     @property
     def organizations(self) -> OrganizationsService:
@@ -234,8 +231,6 @@ class OpsManagerClient:
     def backup(self) -> BackupService:
         """Service for backup snapshots, configs, restore jobs, and checkpoints."""
         return self._backup
-
-    # --- New services ---
 
     @property
     def alert_configurations(self) -> AlertConfigurationsService:
@@ -355,7 +350,7 @@ class OpsManagerClient:
         """Enter context manager."""
         return self
 
-    def __exit__(self, *args) -> None:
+    def __exit__(self, exc_type: type = None, exc_val: BaseException = None, exc_tb: object = None) -> None:
         """Exit context manager."""
         self.close()
 

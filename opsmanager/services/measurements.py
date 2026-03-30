@@ -27,6 +27,14 @@ from opsmanager.services.base import BaseService
 from opsmanager.types import ProcessMeasurements, Measurement
 
 
+def _validate_time_params(period, start, end):
+    """Validate mutual exclusivity of period vs start/end."""
+    if period and (start or end):
+        raise ValueError("period and start/end are mutually exclusive")
+    if bool(start) != bool(end):
+        raise ValueError("start and end must both be provided")
+
+
 class MeasurementsService(BaseService):
     """Service for retrieving measurement metrics.
 
@@ -179,10 +187,7 @@ class MeasurementsService(BaseService):
                 metrics=["OPCOUNTER_QUERY", "OPCOUNTER_INSERT"],
             )
         """
-        if period and (start or end):
-            raise ValueError("period and start/end are mutually exclusive")
-        if bool(start) != bool(end):
-            raise ValueError("start and end must both be provided")
+        _validate_time_params(period, start, end)
 
         params = {"granularity": granularity}
 
@@ -231,10 +236,7 @@ class MeasurementsService(BaseService):
         Returns:
             Measurement data.
         """
-        if period and (start or end):
-            raise ValueError("period and start/end are mutually exclusive")
-        if bool(start) != bool(end):
-            raise ValueError("start and end must both be provided")
+        _validate_time_params(period, start, end)
 
         params = {"granularity": granularity}
 
@@ -282,10 +284,7 @@ class MeasurementsService(BaseService):
         Returns:
             Measurement data.
         """
-        if period and (start or end):
-            raise ValueError("period and start/end are mutually exclusive")
-        if bool(start) != bool(end):
-            raise ValueError("start and end must both be provided")
+        _validate_time_params(period, start, end)
 
         params = {"granularity": granularity}
 

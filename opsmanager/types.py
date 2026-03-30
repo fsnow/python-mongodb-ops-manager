@@ -27,6 +27,15 @@ from enum import Enum
 
 
 T = TypeVar("T")
+E = TypeVar("E", bound=Enum)
+
+
+def _safe_enum(enum_cls: type, value: str, default: Enum) -> Enum:
+    """Convert a string to an enum member, returning default if not found."""
+    try:
+        return enum_cls(value)
+    except ValueError:
+        return default
 
 
 class ClusterType(str, Enum):
@@ -135,7 +144,7 @@ class Cluster:
         return cls(
             id=data.get("id", ""),
             cluster_name=data.get("clusterName", ""),
-            type_name=ClusterType(type_name) if type_name in ClusterType.__members__.values() else ClusterType.REPLICA_SET,
+            type_name=_safe_enum(ClusterType, type_name, ClusterType.REPLICA_SET),
             replica_set_name=data.get("replicaSetName"),
             shard_name=data.get("shardName"),
             last_heartbeat=data.get("lastHeartbeat"),
@@ -617,7 +626,7 @@ class Event:
             alert_config_id=data.get("alertConfigId"),
             replica_set_name=data.get("replicaSetName"),
             shard_name=data.get("shardName"),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -768,7 +777,7 @@ class AlertConfiguration:
             metric_threshold=AlertMetricThreshold.from_dict(mt) if mt else None,
             created=data.get("created"),
             updated=data.get("updated"),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -795,7 +804,7 @@ class MaintenanceWindow:
             end_date=data.get("endDate", ""),
             description=data.get("description"),
             alert_type_names=data.get("alertTypeNames", []),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -846,7 +855,7 @@ class LogCollectionJob:
             log_types=data.get("logTypes", []),
             download_url=data.get("downloadUrl"),
             child_jobs=data.get("childJobs", []),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -879,7 +888,7 @@ class BackupConfig:
             ssl_enabled=data.get("sslEnabled", False),
             excluded_namespaces=data.get("excludedNamespaces", []),
             sync_source_cluster_id=data.get("syncSourceClusterId"),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -918,7 +927,7 @@ class SnapshotSchedule:
             ),
             point_in_time_window_hours=data.get("pointInTimeWindowHours", 0),
             reference_time_zone_offset=data.get("referenceTimeZoneOffset", "+00:00"),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -957,7 +966,7 @@ class RestoreJob:
             finished=data.get("finished"),
             point_in_time=data.get("pointInTime"),
             timestamp=data.get("timestamp"),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -986,7 +995,7 @@ class Checkpoint:
             created=data.get("created"),
             timestamp=data.get("timestamp"),
             replica_set_checkpoints=data.get("parts", []),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -1026,7 +1035,7 @@ class HostAssignment:
             group_id=data.get("groupId"),
             org_id=data.get("orgId"),
             server_type=ServerType.from_dict(st) if st else None,
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -1049,7 +1058,7 @@ class Team:
             name=data.get("name", ""),
             org_id=data.get("orgId"),
             usernames=data.get("usernames", []),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -1084,7 +1093,7 @@ class User:
             created=data.get("created"),
             roles=data.get("roles", []),
             team_ids=data.get("teamIds", []),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -1114,7 +1123,7 @@ class APIKey:
             desc=data.get("desc", ""),
             private_key=data.get("privateKey"),
             roles=data.get("roles", []),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -1172,7 +1181,7 @@ class AgentVersions:
             is_any_agent_version_old=data.get("isAnyAgentVersionOld", False),
             automation_agent_version=data.get("automationAgentVersion"),
             bi_connector_version=data.get("biConnectorVersion"),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -1191,7 +1200,7 @@ class FeaturePolicy:
         return cls(
             external_management_system=data.get("externalManagementSystem"),
             policies=data.get("policies", []),
-            links=[Link.from_dict(l) for l in data.get("links", [])],
+            links=[Link.from_dict(link) for link in data.get("links", [])],
         )
 
     def to_dict(self) -> Dict[str, Any]:

@@ -263,9 +263,13 @@ class BackupService(BaseService):
     ) -> Checkpoint:
         """Get a single checkpoint by ID.
 
+        Note: This method takes cluster_id (not cluster_name), unlike
+        list_checkpoints() which takes cluster_name. This reflects the
+        Ops Manager API inconsistency.
+
         Args:
             project_id: Project (group) ID.
-            cluster_id: Cluster ID.
+            cluster_id: Cluster ID (not name — see list_checkpoints()).
             checkpoint_id: Checkpoint ID.
             as_obj: Return Checkpoint object if True, dict if False.
 

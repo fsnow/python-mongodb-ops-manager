@@ -131,93 +131,84 @@ class TestPerformanceAdvisorNExamples:
 # ---------------------------------------------------------------------------
 
 class TestMaintenanceWindowsPagination:
-    """PAG-1: maintenance_windows.list() silently truncates at first page."""
+    """PAG-1: Verify maintenance_windows.list() paginates correctly."""
 
     def _make_service(self):
         from opsmanager.services.maintenance_windows import MaintenanceWindowsService
         session = MagicMock()
         return MaintenanceWindowsService(session), session
 
-    def test_list_only_fetches_one_page(self):
-        """PAG-1: list() uses _get not _fetch_all, so only first page returned.
-
-        This test documents the truncation behavior. If >100 maintenance windows
-        exist, results are silently dropped.
-        """
+    def test_list_fetches_multiple_pages(self):
+        """PAG-1 FIXED: list() now uses _fetch_all and paginates."""
         svc, session = self._make_service()
-        # Simulate a response with 100 items and totalCount indicating more
-        items = [{"id": f"mw-{i}", "startDate": "2026-01-01", "endDate": "2026-01-02"}
-                 for i in range(100)]
-        session.get.return_value = {
-            "results": items,
-            "totalCount": 150,  # More items exist beyond this page
-        }
-        result = svc.list("proj1", as_obj=False)
-        # Current behavior: returns only the first 100
-        assert len(result) == 100
-        # Verify only one API call was made (no pagination)
-        assert session.get.call_count == 1, (
-            "PAG-1: maintenance_windows.list() should use _fetch_all for pagination "
-            "but currently only makes a single API call."
-        )
+        page1 = [{"id": f"mw-{i}", "startDate": "2026-01-01", "endDate": "2026-01-02"}
+                 for i in range(3)]
+        page2 = [{"id": "mw-3", "startDate": "2026-01-01", "endDate": "2026-01-02"}]
+        session.get.side_effect = [
+            {"results": page1, "totalCount": 4},
+            {"results": page2, "totalCount": 4},
+        ]
+        result = svc.list("proj1", items_per_page=3, as_obj=False)
+        assert len(result) == 4
+        assert session.get.call_count == 2
 
 
 # ---------------------------------------------------------------------------
-# PAG-3: teams.list_users() not paginated
+# PAG-3: teams.list_users() pagination
 # ---------------------------------------------------------------------------
 
 class TestTeamsListUsersPagination:
-    """PAG-3: teams.list_users() silently truncates at first page."""
+    """PAG-3: Verify teams.list_users() paginates correctly."""
 
     def _make_service(self):
         from opsmanager.services.teams import TeamsService
         session = MagicMock()
         return TeamsService(session), session
 
-    def test_list_users_only_fetches_one_page(self):
-        """PAG-3: list_users() uses _get not _fetch_all."""
+    def test_list_users_fetches_multiple_pages(self):
+        """PAG-3 FIXED: list_users() now uses _fetch_all and paginates."""
         svc, session = self._make_service()
-        items = [{"id": f"user-{i}", "username": f"user{i}@example.com",
-                  "firstName": "User", "lastName": str(i)}
-                 for i in range(100)]
-        session.get.return_value = {
-            "results": items,
-            "totalCount": 200,
-        }
-        result = svc.list_users("org1", "team1", as_obj=False)
-        assert len(result) == 100
-        assert session.get.call_count == 1, (
-            "PAG-3: teams.list_users() should use _fetch_all for pagination."
-        )
+        page1 = [{"id": f"user-{i}", "username": f"user{i}@example.com",
+                  "firstName": "User", "lastName": str(i)} for i in range(3)]
+        page2 = [{"id": "user-3", "username": "user3@example.com",
+                  "firstName": "User", "lastName": "3"}]
+        session.get.side_effect = [
+            {"results": page1, "totalCount": 4},
+            {"results": page2, "totalCount": 4},
+        ]
+        result = svc.list_users("org1", "team1", items_per_page=3, as_obj=False)
+        assert len(result) == 4
+        assert session.get.call_count == 2
 
 
 # ---------------------------------------------------------------------------
-# PAG-4: alert_configurations.get_open_alerts() not paginated
+# PAG-4: alert_configurations.get_open_alerts() pagination
 # ---------------------------------------------------------------------------
 
 class TestAlertConfigPagination:
-    """PAG-4: get_open_alerts() not paginated — truncates at first page."""
+    """PAG-4: Verify get_open_alerts() paginates correctly."""
 
     def _make_service(self):
         from opsmanager.services.alert_configurations import AlertConfigurationsService
         session = MagicMock()
         return AlertConfigurationsService(session), session
 
-    def test_get_open_alerts_only_fetches_one_page(self):
-        """PAG-4: get_open_alerts() uses _get not _fetch_all."""
+    def test_get_open_alerts_fetches_multiple_pages(self):
+        """PAG-4 FIXED: get_open_alerts() now uses _fetch_all and paginates."""
         svc, session = self._make_service()
-        items = [{"id": f"alert-{i}", "status": "OPEN", "eventTypeName": "HOST_DOWN",
+        # _fetch_all uses items_per_page=100 by default, so use 100-item pages
+        page1 = [{"id": f"alert-{i}", "status": "OPEN", "eventTypeName": "HOST_DOWN",
                   "created": "2026-01-01", "updated": "2026-01-01", "groupId": "g1"}
                  for i in range(100)]
-        session.get.return_value = {
-            "results": items,
-            "totalCount": 250,
-        }
+        page2 = [{"id": "alert-100", "status": "OPEN", "eventTypeName": "HOST_DOWN",
+                  "created": "2026-01-01", "updated": "2026-01-01", "groupId": "g1"}]
+        session.get.side_effect = [
+            {"results": page1, "totalCount": 101},
+            {"results": page2, "totalCount": 101},
+        ]
         result = svc.get_open_alerts("proj1", "config1", as_obj=False)
-        assert len(result) == 100
-        assert session.get.call_count == 1, (
-            "PAG-4: get_open_alerts() should use _fetch_all for pagination."
-        )
+        assert len(result) == 101
+        assert session.get.call_count == 2
 
 
 # ---------------------------------------------------------------------------

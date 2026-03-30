@@ -40,22 +40,24 @@ class MaintenanceWindowsService(BaseService):
     def list(
         self,
         project_id: str,
+        items_per_page: int = 100,
         as_obj: bool = True,
     ) -> List[MaintenanceWindow]:
         """Get all maintenance windows for a project.
 
         Args:
             project_id: Project (group) ID.
+            items_per_page: Number of items per page.
             as_obj: Return MaintenanceWindow objects if True, dicts if False.
 
         Returns:
             List of maintenance windows.
         """
-        response = self._get(f"groups/{project_id}/maintenanceWindows")
-        results = response.get("results", [])
-        if as_obj:
-            return [MaintenanceWindow.from_dict(item) for item in results]
-        return results
+        return self._fetch_all(
+            path=f"groups/{project_id}/maintenanceWindows",
+            item_type=MaintenanceWindow if as_obj else None,
+            items_per_page=items_per_page,
+        )
 
     def get(
         self,

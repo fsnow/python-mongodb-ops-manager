@@ -536,5 +536,5 @@ class NetworkSession:
     def __enter__(self) -> "NetworkSession":
         return self
 
-    def __exit__(self, *args) -> None:
+    def __exit__(self, exc_type: type = None, exc_val: BaseException = None, exc_tb: object = None) -> None:
         self.close()

@@ -122,13 +122,10 @@ class AlertConfigurationsService(BaseService):
         Returns:
             List of open alerts for this configuration.
         """
-        response = self._get(
-            f"groups/{project_id}/alertConfigs/{alert_config_id}/alerts"
+        return self._fetch_all(
+            path=f"groups/{project_id}/alertConfigs/{alert_config_id}/alerts",
+            item_type=Alert if as_obj else None,
         )
-        results = response.get("results", []) if isinstance(response, dict) else []
-        if as_obj:
-            return [Alert.from_dict(item) for item in results]
-        return results
 
     def list_matcher_fields(self) -> List[str]:
         """Get all valid field names that can be used in alert configuration matchers.
