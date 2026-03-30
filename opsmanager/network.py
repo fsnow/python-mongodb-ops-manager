@@ -319,7 +319,7 @@ class NetworkSession:
                 # Parse response
                 try:
                     response_data = response.json() if response.content else {}
-                except json.JSONDecodeError:
+                except ValueError:
                     response_data = {"raw": response.text}
 
                 # Check for errors
@@ -489,7 +489,7 @@ class NetworkSession:
                 if not response.ok:
                     try:
                         response_data = response.json()
-                    except json.JSONDecodeError:
+                    except ValueError:
                         response_data = {"raw": response.text}
                     raise_for_status(response.status_code, response_data)
 
