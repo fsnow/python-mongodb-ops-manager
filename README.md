@@ -1,6 +1,6 @@
 A Python client library for the MongoDB Ops Manager API, for automating health checks, metrics collection, and reporting across MongoDB deployments.
 
-**Status:** Beta — 25 services tested against live Ops Manager and validated against mongocli (Go SDK)
+**Status:** Beta — tested against live Ops Manager and validated against mongocli (Go SDK)
 
 ## Features
 
