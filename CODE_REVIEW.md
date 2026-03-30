@@ -22,9 +22,9 @@ The following issues from the original reviews have been fixed:
 | ID | Severity | File | Issue |
 |----|----------|------|-------|
 | BUG-1 | **High** | `alert_configurations.py:128` | `get_open_alerts()` fallback `[response]` wraps entire response dict in list when `"results"` key missing; should be `[]` |
-| BUG-2 | **Medium** | `performance_advisor.py:66,185` | Param key `"NExamples"` — should be `"nExamples"` (lowercase n). API silently ignores the miscased parameter |
-| BUG-3 | Low | `types.py:988` | `Checkpoint.from_dict()` uses `data.get("parts", [])` for field `replica_set_checkpoints` — verify actual API key name |
-| BUG-4 | Low | `types.py:1406` | `DaemonConfig.from_dict()` accesses `data["machine"]["machine"]` (nested same-name key) — fragile, verify API shape |
+| ~~BUG-2~~ | ~~Medium~~ | `performance_advisor.py:66,185` | ~~`"NExamples"` casing~~ — **NOT A BUG**: Go SDK uses uppercase `NExamples` (`url:"NExamples,omitempty"`). Our casing is correct. |
+| ~~BUG-3~~ | ~~Low~~ | `types.py:988` | ~~Checkpoint field name~~ — **NOT A BUG**: Go SDK uses `json:"parts"`. Our `data.get("parts", [])` is correct. |
+| ~~BUG-4~~ | ~~Low~~ | `types.py:1406` | ~~DaemonConfig machine parsing~~ — **NOT A BUG**: Go SDK has `Machine.Machine` (nested same-name `json:"machine"`). Our parsing matches the API. |
 
 ---
 
@@ -69,7 +69,7 @@ These methods use a single `_get` instead of `_fetch_all`, silently truncating r
 
 | ID | File | Issue |
 |----|------|-------|
-| API-1 | `global_admin.py:117` | `admin/whitelist` may be wrong — current API uses `admin/apiKeys/{id}/accessList` |
+| API-1 | `global_admin.py:117` | **CONFIRMED BUG**: `admin/whitelist` is wrong — Go SDK uses `orgs/{orgID}/apiKeys/{apiKeyID}/accessList` |
 | API-2 | `version.py:71` | `static/version_manifest/{version}` bypasses API base path — verify this works |
 | API-3 | `live_migration.py:54` | `orgs/{id}/liveExport/migrationLink/status` — docs show `liveMigrations/linkTokens` |
 

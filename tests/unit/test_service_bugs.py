@@ -80,19 +80,20 @@ class TestAlertConfigGetOpenAlerts:
 # ---------------------------------------------------------------------------
 
 class TestPerformanceAdvisorNExamples:
-    """BUG-2: get_suggested_indexes() sends 'NExamples' (uppercase N) instead of 'nExamples'."""
+    """Verify NExamples casing matches the Go SDK (uppercase N is correct).
+
+    The Go SDK uses `NExamples` (uppercase N) per:
+    opsmngr/performance_advisor.go: `url:"NExamples,omitempty"`
+    This is NOT a bug — the Ops Manager API expects uppercase N.
+    """
 
     def _make_service(self):
         from opsmanager.services.performance_advisor import PerformanceAdvisorService
         session = MagicMock()
         return PerformanceAdvisorService(session), session
 
-    def test_suggested_indexes_sends_correct_param_casing(self):
-        """BUG-2: nExamples param should use lowercase 'n'.
-
-        All other params use lowercase-first camelCase (nLogs, nIndexes).
-        This test documents the expected behavior — it will FAIL until BUG-2 is fixed.
-        """
+    def test_suggested_indexes_sends_NExamples_uppercase(self):
+        """NExamples uses uppercase N, matching the Go SDK and OM API."""
         svc, session = self._make_service()
         session.get.return_value = {
             "suggestedIndexes": [],
@@ -103,35 +104,26 @@ class TestPerformanceAdvisorNExamples:
             host_id="host1:27017",
             n_examples=5,
         )
-        # Check what params were sent
-        call_args = session.get.call_args
-        params = call_args[1].get("params", call_args[0][1] if len(call_args[0]) > 1 else {})
-        # The params are in the path or passed as params kwarg
-        # BaseService._get calls session.get(full_path, params=params)
         actual_params = session.get.call_args
-        path_called = actual_params[0][0] if actual_params[0] else ""
         params_sent = actual_params[1].get("params", {}) if actual_params[1] else {}
 
-        assert "nExamples" in params_sent, (
-            f"BUG-2: Expected 'nExamples' (lowercase n) in params but got keys: {list(params_sent.keys())}. "
-            f"'NExamples' (uppercase N) is likely being ignored by the API."
+        assert "NExamples" in params_sent, (
+            f"Expected 'NExamples' (uppercase N, matching Go SDK) but got keys: {list(params_sent.keys())}"
         )
-        assert params_sent.get("nExamples") == 5
+        assert params_sent.get("NExamples") == 5
 
-    def test_perf_advisor_options_to_params_casing(self):
-        """BUG-2 also in PerformanceAdvisorOptions.to_params()."""
-        from opsmanager.services.performance_advisor import PerformanceAdvisorService
-        # Check if PerformanceAdvisorOptions exists and has the bug
+    def test_perf_advisor_options_to_params_uses_NExamples(self):
+        """PerformanceAdvisorOptions.to_params() uses uppercase N, matching Go SDK."""
         try:
             from opsmanager.services.performance_advisor import PerformanceAdvisorOptions
             opts = PerformanceAdvisorOptions(n_examples=3)
             params = opts.to_params()
-            assert "nExamples" in params, (
-                f"BUG-2: PerformanceAdvisorOptions.to_params() uses 'NExamples', should be 'nExamples'. "
-                f"Got keys: {list(params.keys())}"
+            assert "NExamples" in params, (
+                f"Expected 'NExamples' (uppercase N) but got keys: {list(params.keys())}"
             )
+            assert params["NExamples"] == 3
         except ImportError:
-            pytest.skip("PerformanceAdvisorOptions not found (dead code may have been removed)")
+            pytest.skip("PerformanceAdvisorOptions not found")
 
 
 # ---------------------------------------------------------------------------
