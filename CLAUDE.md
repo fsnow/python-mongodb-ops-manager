@@ -39,44 +39,59 @@ opsmanager/
     ├── deployments.py       # Hosts, databases, disks
     ├── measurements.py      # Time-series metrics
     ├── performance_advisor.py  # Slow queries, index suggestions
-    └── alerts.py            # Alerts API
+    ├── alerts.py            # Alerts API
+    ├── alert_configurations.py  # Alert rules/policies
+    ├── agents.py            # Monitoring, backup, automation agents
+    ├── backup.py            # Snapshots, restore jobs, checkpoints, configs
+    ├── automation.py        # Automation config and status
+    ├── events.py            # Project and organization events
+    ├── global_alerts.py     # Global alerts (admin)
+    ├── diagnostics.py       # Diagnostic archives
+    ├── maintenance_windows.py  # Scheduled maintenance
+    ├── log_collection.py    # Log collection jobs (read + write)
+    ├── server_usage.py      # Host assignments, server types
+    ├── feature_control.py   # Feature policies
+    ├── teams.py             # Team management
+    ├── users.py             # User management
+    ├── api_keys.py          # API key management
+    ├── version.py           # Ops Manager version info
+    ├── live_migration.py    # Live migration status
+    ├── admin_backup_stores.py  # Backup store admin
+    └── global_admin.py      # Global admin operations
 ```
 
 ## Current Status
 
-**Published to PyPI**: https://pypi.org/project/opsmanager/
+**Published to PyPI**: <https://pypi.org/project/opsmanager/>
+
+**v0.4.0** — 100% coverage of read-only Ops Manager APIs (25 services).
 
 ### Implemented
+
 - [x] Core client with rate limiting and retries
 - [x] HTTP Digest authentication
 - [x] Exception hierarchy mapping HTTP status codes
 - [x] Pagination (automatic and iterator-based)
-- [x] Services: organizations, projects, clusters, deployments, measurements, performance_advisor, alerts
+- [x] 25 services covering all read-only Ops Manager API endpoints
 - [x] Typed dataclasses for all major API types
-- [x] Validation script against mongocli
+- [x] Log collection write operations (create, extend, retry, delete)
+- [x] Validation scripts against mongocli (10 read-only + 4 admin endpoints)
 
 ### Not Yet Implemented
-- [ ] Automation service (automationConfig)
-- [ ] Backup services (snapshots, restore jobs)
-- [ ] Events service
-- [ ] Log collection service
-- [ ] Additional services from Go SDK (see `opsmngr.go` lines 88-129)
+
+- [ ] Write operations for most services (automation config updates, backup enable/disable, etc.)
+- [ ] Additional admin-only write endpoints
 
 ### Testing
-- **Live tests**: `tests/test_live.py` - comprehensive integration tests (all 9 tests pass)
-- **mongocli validation**: `tests/validate_against_mongocli.py` - compares output against mongocli (Go SDK)
+
+- **Live tests**: `tests/test_live.py` — 11 core integration tests
+- **Extended live tests**: `tests/test_live_extended.py` — 22 tests covering all Tier 1-3 services
+- **mongocli validation (read-only)**: `tests/validate_against_mongocli.py` — 10 endpoints
+- **mongocli validation (admin)**: `tests/validate_against_mongocli_admin.py` — 4 endpoints
+- **Unit tests**: `tests/unit/` — 108 tests (error handling, pagination, rate limiter, measurements, log collection, service bugs)
 - All Python files pass syntax check (`python -m py_compile`)
 
-**Last tested**: 2025-11-26 against Ops Manager at `http://98.91.236.168:8081`
-- Organizations: ✓
-- Projects: ✓
-- Clusters: ✓
-- Hosts: ✓ (3-node replica set)
-- Measurements: ✓ (133 types, 125 with data)
-- Databases: ✓
-- Alerts: ✓
-- Performance Advisor: ✓ (gracefully handles unavailability)
-- Raw dict mode: ✓
+**Last tested**: 2026-03-30 against Ops Manager at `http://54.81.135.16:8081`
 
 ## Usage Example
 
