@@ -1,198 +1,137 @@
-# Code Review: python-mongodb-ops-manager
+# Code Review — Outstanding Issues
 
-**Reviewed:** 2026-03-28
-**Reviewer:** Claude (claude-sonnet-4-6)
-**Scope:** Full codebase — 21 Python files, ~3,500 lines
-
----
-
-## Overall Assessment
-
-**Grade: A- (Excellent)**
-
-Production-ready, professional quality codebase. No critical bugs found. The main weaknesses are missing input validation, dead code, a potential API parameter bug, and the absence of unit tests.
+**Consolidated:** 2026-03-27
+**Source:** CODE_REVIEW_1.md, CODE_REVIEW_2.md
+**Status:** Issues verified against current codebase. Fixed items removed.
 
 ---
 
-## What's Good
+## Resolved Since Reviews
 
-- Consistent PEP 8, type hints, and Google-style docstrings throughout
-- Well-designed exception hierarchy with proper HTTP status code mapping
-- Thread-safe rate limiter with retry/backoff logic
-- Lazy service initialization and memory-efficient pagination iterator
-- API keys masked from logging; SSL verification enabled by default
-- Comprehensive README and live integration tests
+The following issues from the original reviews have been fixed:
+- Mutual exclusivity validation for `period` vs `start/end` in `measurements.py` (added)
+- User-Agent version in `network.py` now reads from `__version__` dynamically
+- `MeasurementOptions` dead code removed from `measurements.py`
+- `except Exception` narrowed to `except OpsManagerError` in `performance_advisor.py`
+- Whitespace-only string validation added to `auth.py` with `.strip()`
 
 ---
 
 ## Bugs
 
-| Severity | File | Line | Issue |
-|---|---|---|---|
-| **High** | `services/performance_advisor.py` | 184 | Param key `"NExamples"` — if the API expects `"nExamples"`, requests will silently send the wrong parameter |
-| **Medium** | `services/measurements.py` | 219, 266, 312 | `period` and `start`/`end` are documented as mutually exclusive but not enforced in code; if both are supplied, API behavior is undefined |
-| **Medium** | `pagination.py` | 121 | Last-page detection via `len(results) < items_per_page` causes one extra unnecessary API fetch when the final page happens to be exactly full |
-
-### Bug Details
-
-**`performance_advisor.py:184` — NExamples param key**
-
-The parameter is passed as `"NExamples"` (capital N). Verify against the Ops Manager API docs. If the API expects `"nExamples"`, this is a silent functional bug where the parameter is simply ignored by the server.
-
-**`measurements.py` — Missing mutual exclusivity validation**
-
-`period` and `start`/`end` are mutually exclusive per the docstrings, but nothing enforces this. Add at the start of each affected method:
-
-```python
-if period and (start or end):
-    raise ValueError("period and start/end are mutually exclusive")
-if bool(start) != bool(end):
-    raise ValueError("start and end must both be provided")
-```
-
-**`pagination.py:121` — Last-page detection**
-
-```python
-if len(results) < self._items_per_page:
-    self._exhausted = True
-```
-
-If the last page contains exactly `items_per_page` items, this condition is false and the iterator makes one extra fetch before hitting the empty-result guard on line 108. A more efficient approach is to compare the running count of fetched items against `total_count` (already available from the response at line 106).
+| ID | Severity | File | Issue |
+|----|----------|------|-------|
+| BUG-1 | **High** | `alert_configurations.py:128` | `get_open_alerts()` fallback `[response]` wraps entire response dict in list when `"results"` key missing; should be `[]` |
+| BUG-2 | **Medium** | `performance_advisor.py:66,185` | Param key `"NExamples"` — should be `"nExamples"` (lowercase n). API silently ignores the miscased parameter |
+| BUG-3 | Low | `types.py:988` | `Checkpoint.from_dict()` uses `data.get("parts", [])` for field `replica_set_checkpoints` — verify actual API key name |
+| BUG-4 | Low | `types.py:1406` | `DaemonConfig.from_dict()` accesses `data["machine"]["machine"]` (nested same-name key) — fragile, verify API shape |
 
 ---
 
-## Code Quality Issues
+## Pagination Gaps
 
-| Severity | File | Line | Issue |
-|---|---|---|---|
-| Low | `types.py` | 138 | Enum membership check via `__members__.values()` is not idiomatic; use `try/except ValueError` |
-| Low | `network.py` | 320 | `except ValueError` for JSON parse failures should be `except json.JSONDecodeError` |
-| Low | `network.py` | 197 | User-Agent hardcoded as `"0.1.0"` but package is at `0.3.1`; should reference `__version__` |
-| Low | `services/measurements.py` | 31–65 | `MeasurementOptions` dataclass defined but never used — dead code |
-| Low | `services/base.py` | 40 | API path `"api/public/v1.0"` is hardcoded and not configurable for future versions |
+These methods use a single `_get` instead of `_fetch_all`, silently truncating results beyond 100 items:
 
-### Code Quality Details
-
-**`types.py:138` — Enum check**
-
-Current:
-```python
-type_name=ClusterType(type_name) if type_name in ClusterType.__members__.values() else ClusterType.REPLICA_SET,
-```
-
-Preferred:
-```python
-try:
-    type_name = ClusterType(type_name)
-except ValueError:
-    type_name = ClusterType.REPLICA_SET
-```
-
-**`network.py:197` — User-Agent version**
-
-Current:
-```python
-"User-Agent": user_agent or "python-opsmanager/0.1.0",
-```
-
-Should be:
-```python
-from opsmanager import __version__
-"User-Agent": user_agent or f"python-opsmanager/{__version__}",
-```
-
-**`measurements.py:31-65` — Dead code**
-
-`MeasurementOptions` is a dataclass with a `to_params()` method, but all measurement service methods build their params manually instead of using it. Either refactor the service methods to accept a `MeasurementOptions` instance, or remove the class entirely.
+| ID | Severity | File | Method |
+|----|----------|------|--------|
+| PAG-1 | Medium | `maintenance_windows.py:54` | `list()` |
+| PAG-2 | **High** | `server_usage.py:60-118` | `list_all_host_assignments()`, `get_project_host_assignments()`, `get_organization_host_assignments()` |
+| PAG-3 | Medium | `teams.py:137` | `list_users()` |
+| PAG-4 | Medium | `alert_configurations.py:125` | `get_open_alerts()` |
 
 ---
 
-## Error Handling Issues
+## Type Annotation Issues
 
-| Severity | File | Line | Issue |
-|---|---|---|---|
-| Medium | `services/performance_advisor.py` | 248–250 | Bare `except Exception` silently absorbs all errors into the result dict; should catch `OpsManagerError` specifically |
-| Low | `auth.py` | 87–90 | Whitespace-only strings (e.g. `"   "`) pass key validation; add `.strip()` check |
-| Low | `network.py` | 320 | Use `json.JSONDecodeError` instead of `ValueError` for JSON parse failures |
-
-### Error Handling Details
-
-**`performance_advisor.py:248` — Broad exception catch**
-
-```python
-except Exception as e:
-    # Log but continue with other hosts
-    results[host_id] = {"error": str(e)}
-```
-
-This swallows all exceptions silently, including programming errors. Change to `except OpsManagerError as e:` so unexpected exceptions propagate normally.
-
-**`auth.py:87-90` — Whitespace validation**
-
-```python
-if not public_key:
-    raise ValueError("public_key is required")
-```
-
-A string like `"   "` passes this check. Should be:
-
-```python
-if not public_key or not public_key.strip():
-    raise ValueError("public_key is required")
-```
+| ID | Severity | File | Issue |
+|----|----------|------|-------|
+| TYPE-1 | Medium | All services | `as_obj=False` return types are wrong — annotated as typed object but returns `Dict`. Needs `@overload` with `Literal[True]`/`Literal[False]` |
+| TYPE-2 | Low | `network.py:539`, `client.py:358` | `__exit__(self, *args)` — should use `(self, exc_type, exc_val, exc_tb)` |
+| TYPE-3 | Low | `types.py:39-46` | `ProcessType` enum name/value mismatch: `REPLICA_SET_PRIMARY = "REPLICA_PRIMARY"` |
+| TYPE-4 | Low | `types.py:138` | `ClusterType` membership check via `__members__.values()` — use try/except instead |
 
 ---
 
-## Security Issues
+## Dead Code
 
-| Severity | File | Line | Issue |
-|---|---|---|---|
-| Low | `client.py` | 119 | `base_url` is not validated to be HTTPS; no warning if a plain HTTP URL is used in production |
-
-### Security Details
-
-**`client.py:119` — No HTTPS enforcement**
-
-`base_url` is accepted as-is with no validation. Consider emitting a warning for non-HTTPS, non-localhost URLs:
-
-```python
-import warnings
-if not base_url.startswith("https://") and "localhost" not in base_url and "127.0.0.1" not in base_url:
-    warnings.warn(
-        "base_url is not HTTPS. API credentials may be transmitted in plaintext.",
-        SecurityWarning,
-        stacklevel=2,
-    )
-```
-
-**Note on error responses:** Full API responses are stored in exception objects (`errors.py:49`). This is useful for debugging but be cautious when logging exceptions in production environments, as responses could contain sensitive data.
+| ID | File | Item |
+|----|------|------|
+| DEAD-1 | `types.py:1215` | `AdminBackupConfig` — not imported by any service |
+| DEAD-2 | `types.py:1500` | `PaginatedResult` — not used anywhere |
+| DEAD-3 | `pagination.py:28-44` | `ListOptions` — not used by any service |
+| DEAD-4 | `performance_advisor.py:32-67` | `PerformanceAdvisorOptions` — defined but no service method uses it |
+| DEAD-5 | `organizations.py:21` | Unused imports: `Iterator`, `Dict`, `Any` |
+| DEAD-6 | `version.py:42` | `BASE_PATH` override identical to parent class, never used by either method |
 
 ---
 
-## Testing Gaps
+## API Path Issues (Unverified)
 
-The test suite consists entirely of live integration tests against a real Ops Manager instance. There are no unit tests with mocks.
-
-**Untested paths:**
-- Rate limiter edge cases (burst=1, window boundary, timeout)
-- Pagination transitions (empty results, single item, exactly-full last page)
-- All exception handling paths (404, 401, 429 responses)
-- `auth.py` validation logic
-- Enum handling in `types.py`
-- The `MeasurementOptions.to_params()` method (also dead code)
-
-**Recommendation:** Add a `tests/unit/` directory using `pytest` with `responses` or `unittest.mock` to mock HTTP calls. Prioritize tests for the rate limiter, pagination, and error handling since these have the most complex logic.
+| ID | File | Issue |
+|----|------|-------|
+| API-1 | `global_admin.py:117` | `admin/whitelist` may be wrong — current API uses `admin/apiKeys/{id}/accessList` |
+| API-2 | `version.py:71` | `static/version_manifest/{version}` bypasses API base path — verify this works |
+| API-3 | `live_migration.py:54` | `orgs/{id}/liveExport/migrationLink/status` — docs show `liveMigrations/linkTokens` |
 
 ---
 
-## Top 5 Actionable Fixes
+## Security
 
-1. **Verify `"NExamples"` vs `"nExamples"`** in `performance_advisor.py:184` against the Ops Manager API docs — this could be a silent functional bug affecting every performance advisor call that uses this parameter.
+| ID | Severity | File | Issue |
+|----|----------|------|-------|
+| SEC-1 | Medium | `types.py:1120` | `APIKey.to_dict()` uses `asdict(self)` which exposes `private_key` if populated |
+| SEC-2 | Low | `client.py` | No HTTPS enforcement or warning for non-localhost HTTP URLs |
 
-2. **Add mutual exclusivity validation** for `period` vs `start`/`end` in `measurements.py` at lines 219, 266, and 312 — prevents undefined API behavior when both are supplied.
+---
 
-3. **Add unit tests with mocks** for rate limiter, pagination, and error handling — the biggest gap in long-term maintainability.
+## Code Duplication
 
-4. **Delete `MeasurementOptions`** (or refactor measurement methods to actually use it) — dead code creates confusion about the intended API.
+| ID | File | Issue |
+|----|------|-------|
+| DUP-1 | `network.py:420-530` | `download()` duplicates ~80 lines of retry/rate-limit logic from `request()` — extract shared `_execute_request()` |
+| DUP-2 | `measurements.py` | Time validation block duplicated identically in `host()`, `database()`, `disk()` — extract to `_validate_time_params()` |
 
-5. **Fix User-Agent version** in `network.py:197` to pull from `__version__` dynamically so it stays accurate across releases.
+---
+
+## Inconsistencies
+
+| ID | File | Issue |
+|----|------|-------|
+| INCON-1 | Various | `params or None` vs passing `params` directly — inconsistent across services |
+| INCON-4 | `backup.py:233,260` | `list_checkpoints()` takes `cluster_name`, `get_checkpoint()` takes `cluster_id` — add cross-reference comment |
+| INCON-5 | `client.py:162-238` | Stale `"existing/new services"` section comments from implementation — remove |
+
+---
+
+## Documentation
+
+| ID | File | Issue |
+|----|------|-------|
+| DOC-1 | `CLAUDE.md` | "Not Yet Implemented" list is stale — automation, backup, events, log collection are all implemented |
+| DOC-2 | `__init__.py` | `OpsManagerTimeoutError`, `OpsManagerConnectionError`, `OpsManagerValidationError` not exported in `__all__` |
+
+---
+
+## Style
+
+| ID | File | Issue |
+|----|------|-------|
+| STYLE-1 | `types.py` | 14 occurrences of single-char `l` variable in `[Link.from_dict(l) for l in ...]` — use `link` |
+
+---
+
+## Infrastructure
+
+| ID | File | Issue |
+|----|------|-------|
+| INFRA-1 | `pagination.py:121` | Last-page detection via `len(results) < items_per_page` causes one extra fetch when final page is exactly full |
+| INFRA-2 | `network.py:322` | `except ValueError` catches JSON parse errors (intentional — `json` module shadowed by `json` parameter in method signature). Correct but worth noting. |
+
+---
+
+## Test Gaps
+
+- No unit tests for any service class HTTP calls (only live integration tests)
+- No unit tests for `types.py` `from_dict()` round-trips
+- No tests for `alert_configurations.py` `get_open_alerts()` fallback (BUG-1)
+- `test_burst_throttles_after_burst` asserts `result in (True, False)` — never fails
