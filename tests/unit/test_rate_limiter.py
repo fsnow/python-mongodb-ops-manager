@@ -71,12 +71,29 @@ class TestRateLimiterBurstMode:
         assert all(results)
 
     def test_burst_throttles_after_burst(self):
-        """After exhausting burst, requests should wait."""
-        limiter = RateLimiter(rate=100.0, burst=2)
+        """After exhausting burst, next request should be delayed."""
+        limiter = RateLimiter(rate=10.0, burst=2)  # 100ms interval
         limiter.acquire()
         limiter.acquire()
-        # Third request requires token replenishment
-        result = limiter.acquire(timeout=0.0)
-        # May or may not succeed depending on token replenishment timing,
-        # but should not raise
-        assert result in (True, False)
+        # Burst exhausted — third request must wait for token replenishment
+        start = time.monotonic()
+        result = limiter.acquire(timeout=1.0)
+        elapsed = time.monotonic() - start
+        assert result is True
+        assert elapsed >= 0.05, f"Expected wait after burst exhausted, got {elapsed:.3f}s"
+
+    def test_consistent_spacing_across_requests(self):
+        """Verify requests are spaced consistently at the configured rate."""
+        limiter = RateLimiter(rate=20.0, burst=1)  # 50ms interval
+        timestamps = []
+        for _ in range(5):
+            limiter.acquire()
+            timestamps.append(time.monotonic())
+
+        gaps = [timestamps[i+1] - timestamps[i] for i in range(len(timestamps) - 1)]
+        # First gap may be near-zero (first acquire is immediate), rest should be ~50ms
+        for i, gap in enumerate(gaps[1:], start=2):
+            assert gap >= 0.03, (
+                f"Gap between request {i} and {i+1} was {gap*1000:.1f}ms, "
+                f"expected ~50ms (rate=20/s)"
+            )
