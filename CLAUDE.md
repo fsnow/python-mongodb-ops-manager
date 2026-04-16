@@ -63,7 +63,7 @@ opsmanager/
 
 **Published to PyPI**: <https://pypi.org/project/opsmanager/>
 
-**v0.4.0** — 100% coverage of read-only Ops Manager APIs (25 services).
+Since **v0.4.0**: 100% coverage of read-only Ops Manager APIs (25 services).
 
 ### Implemented
 

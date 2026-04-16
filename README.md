@@ -113,7 +113,7 @@ with OpsManagerClient(
 
 | Service | Methods | Description |
 |---------|---------|-------------|
-| `alerts` | `list`, `get` | Active and resolved alert instances |
+| `alerts` | `list`, `get`, `list_open`, `acknowledge` + iter | Active and resolved alert instances |
 | `alert_configurations` | `list`, `get`, `get_open_alerts`, `list_matcher_fields` + iter | Alert configuration rules |
 | `global_alerts` | `list`, `get`, `list_open` + iter | Cross-project global alerts |
 
@@ -122,7 +122,7 @@ with OpsManagerClient(
 | Service | Methods | Description |
 |---------|---------|-------------|
 | `automation` | `get_config`, `get_status`, `get_backup_agent_config`, `get_monitoring_agent_config` | Automation configuration and convergence status |
-| `agents` | `list_by_type`, `list_links`, `get_project_versions`, `get_global_versions`, `list_api_keys` + iter | Agent inventory and versions |
+| `agents` | `list`, `list_monitoring`, `list_backup`, `list_links`, `get_project_versions`, `get_global_versions`, `list_api_keys` + iter | Agent inventory and versions |
 
 ### Backup
 
