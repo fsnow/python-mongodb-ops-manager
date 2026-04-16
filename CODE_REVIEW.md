@@ -1,7 +1,6 @@
 # Code Review — Outstanding Issues
 
-**Consolidated:** 2026-03-30
-**Source:** CODE_REVIEW_1.md, CODE_REVIEW_2.md
+**Consolidated:** 2026-04-16
 **Status:** Issues verified against current codebase. Fixed items removed.
 
 ---
@@ -31,6 +30,8 @@ The following issues from the original reviews have been fixed:
 - INCON-4: Cross-reference comment added to `backup.py` `get_checkpoint()` re: cluster_id vs cluster_name
 - INCON-5: Stale "existing/new services" comments removed from `client.py`
 - STYLE-1: Single-char `l` variable renamed to `link` in `types.py` comprehensions
+- DOC-1: CLAUDE.md status section updated to reflect all implemented services
+- Weak `test_burst_throttles_after_burst` fixed in v0.4.2 with real timing assertions
 
 ---
 
@@ -78,18 +79,8 @@ The following issues from the original reviews have been fixed:
 |----|------|-------|
 | INCON-1 | Various | `params or None` vs passing `params` directly — inconsistent across services |
 
-### Documentation
-
-| ID | File | Issue |
-|----|------|-------|
-| DOC-1 | `CLAUDE.md` | "Not Yet Implemented" list is stale — automation, backup, events, log collection are all implemented |
-
 ### Infrastructure
 
 | ID | File | Issue |
 |----|------|-------|
 | INFRA-1 | `pagination.py:121` | Last-page detection via `len(results) < items_per_page` causes one extra fetch when final page is exactly full |
-
-### Test Gaps
-
-- `test_burst_throttles_after_burst` asserts `result in (True, False)` — never fails
