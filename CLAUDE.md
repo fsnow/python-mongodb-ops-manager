@@ -16,8 +16,7 @@ Enable automated health checks, metrics collection, and fleet management for Mon
 - **Return types**: Support both typed dataclasses (`as_obj=True`) and raw dicts
 
 ### Key References
-- **Go SDK**: `~/github/mongodb/go-client-mongodb-ops-manager/opsmngr/` - authoritative for API coverage
-- **atlasapi**: `~/github/mgmonteleone/python-atlasapi/atlasapi/` - Python style reference
+- **Go SDK**: https://github.com/mongodb/go-client-mongodb-ops-manager — authoritative for API coverage
 - **Ops Manager API docs**: https://www.mongodb.com/docs/ops-manager/current/reference/api/
 
 ## Package Structure
@@ -91,8 +90,6 @@ opsmanager/
 - **Unit tests**: `tests/unit/` — 108 tests (error handling, pagination, rate limiter, measurements, log collection, service bugs)
 - All Python files pass syntax check (`python -m py_compile`)
 
-**Last tested**: 2026-03-30 against Ops Manager at `http://54.81.135.16:8081`
-
 ## Usage Example
 
 ```python
@@ -148,10 +145,6 @@ python tests/validate_against_mongocli.py
 
 > **Required for every change**: Both `test_live.py` and `validate_against_mongocli.py` must pass before
 > committing or publishing. The mongocli validation step was skipped in v0.3.0 and should not be skipped again.
-
-## Related Projects
-
-- **AUTOMATION_PLAN.md**: Defined elsewhere - describes health check export scripts that use this library
 
 ## Publishing a New Version to PyPI
 
