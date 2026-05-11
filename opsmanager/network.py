@@ -30,6 +30,7 @@ from typing import Any, Callable, Dict, Optional, Union
 from urllib.parse import urljoin
 
 import requests
+from requests.adapters import HTTPAdapter
 from requests.auth import AuthBase
 
 from opsmanager.errors import (
@@ -156,6 +157,7 @@ class NetworkSession:
     DEFAULT_RETRY_BACKOFF = 1.0  # seconds
 
     DEFAULT_RATE_BURST = 1  # no bursting by default
+    DEFAULT_POOL_SIZE = 10  # matches requests' default HTTPAdapter pool size
 
     def __init__(
         self,
@@ -168,6 +170,7 @@ class NetworkSession:
         retry_backoff: float = DEFAULT_RETRY_BACKOFF,
         verify_ssl: bool = True,
         user_agent: Optional[str] = None,
+        pool_size: int = DEFAULT_POOL_SIZE,
     ):
         """Initialize the network session.
 
@@ -182,6 +185,10 @@ class NetworkSession:
             retry_backoff: Base backoff time between retries.
             verify_ssl: Whether to verify SSL certificates.
             user_agent: Custom User-Agent string.
+            pool_size: HTTPAdapter connection pool size (default 10).
+                Raise above 10 when running with high parallelism — the
+                underlying urllib3 pool is the bottleneck above ~10 concurrent
+                workers regardless of rate_limit/burst settings.
         """
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
@@ -192,6 +199,9 @@ class NetworkSession:
         self._session = requests.Session()
         self._session.auth = auth
         self._session.verify = verify_ssl
+        adapter = HTTPAdapter(pool_connections=pool_size, pool_maxsize=pool_size)
+        self._session.mount("http://", adapter)
+        self._session.mount("https://", adapter)
         from opsmanager import __version__  # deferred to avoid circular import
         self._session.headers.update({
             "Accept": "application/json",

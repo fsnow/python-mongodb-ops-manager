@@ -197,8 +197,11 @@ client = OpsManagerClient(
     retry_backoff=1.0,   # Base backoff between retries in seconds
     verify_ssl=True,     # SSL certificate verification (default True)
     user_agent=None,     # Custom User-Agent string (optional)
+    pool_size=10,        # HTTPAdapter connection pool size (default 10)
 )
 ```
+
+For high-parallelism use cases (many threads sharing one client), raise `pool_size` to match your worker count. The default of 10 is the urllib3 default and becomes the throughput bottleneck above ~10 concurrent workers.
 
 ## Rate Limiting
 

@@ -246,7 +246,7 @@ def validate_events(client: OpsManagerClient, project_id: str, mongocli_env: Dic
     expected_cli_extras = {"alertId", "alertConfigId", "hostname",
                            "targetPublicKey", "userId", "username",
                            "Port"}
-    expected_py_extras = {"diffs", "port", "isGlobalAdmin", "hostId"}
+    expected_py_extras = {"diffs", "port", "isGlobalAdmin", "hostId", "clusterId"}
 
     differences = compare_results(py_events, cli_events)
     unexpected = filter_differences(differences, expected_py_extras, expected_cli_extras)

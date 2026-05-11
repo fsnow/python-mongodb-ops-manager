@@ -274,6 +274,35 @@ class TestClusterUnknownType:
 # DEAD-4: PerformanceAdvisorOptions exists but is unused
 # ---------------------------------------------------------------------------
 
+class TestConnectionPoolSize:
+    """NetworkSession should honor pool_size on its mounted HTTPAdapter."""
+
+    def test_default_pool_size_is_ten(self):
+        from opsmanager.network import NetworkSession
+        from unittest.mock import MagicMock
+        session = NetworkSession(base_url="http://x", auth=MagicMock())
+        adapter = session._session.get_adapter("http://x")
+        assert adapter._pool_connections == 10
+        assert adapter._pool_maxsize == 10
+
+    def test_custom_pool_size_is_applied(self):
+        from opsmanager.network import NetworkSession
+        from unittest.mock import MagicMock
+        session = NetworkSession(base_url="http://x", auth=MagicMock(), pool_size=50)
+        adapter = session._session.get_adapter("http://x")
+        assert adapter._pool_connections == 50
+        assert adapter._pool_maxsize == 50
+
+    def test_client_forwards_pool_size_to_session(self):
+        from opsmanager import OpsManagerClient
+        client = OpsManagerClient(
+            base_url="http://x", public_key="a", private_key="b", pool_size=30
+        )
+        adapter = client._session._session.get_adapter("http://x")
+        assert adapter._pool_maxsize == 30
+        client.close()
+
+
 class TestPerformanceAdvisorOptionsUnused:
     """DEAD-4: PerformanceAdvisorOptions is defined but no service method accepts it."""
 

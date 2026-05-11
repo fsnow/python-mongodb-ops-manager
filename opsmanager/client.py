@@ -124,6 +124,7 @@ class OpsManagerClient:
         retry_backoff: float = 1.0,
         verify_ssl: bool = True,
         user_agent: Optional[str] = None,
+        pool_size: int = 10,
     ):
         """Initialize the Ops Manager client.
 
@@ -142,6 +143,10 @@ class OpsManagerClient:
             retry_backoff: Base backoff time between retries in seconds.
             verify_ssl: Whether to verify SSL certificates (default True).
             user_agent: Custom User-Agent string.
+            pool_size: HTTPAdapter connection pool size (default 10).
+                Raise above 10 (e.g., to match your worker count) when calling
+                this client from many threads — urllib3's pool is otherwise
+                the throughput bottleneck.
         """
         # Create authentication handler
         auth = OpsManagerAuth(public_key=public_key, private_key=private_key)
@@ -157,6 +162,7 @@ class OpsManagerClient:
             retry_backoff=retry_backoff,
             verify_ssl=verify_ssl,
             user_agent=user_agent,
+            pool_size=pool_size,
         )
 
         # Initialize services
