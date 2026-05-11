@@ -66,8 +66,10 @@ class RateLimiter:
 
         Args:
             rate: Maximum requests per second. Default is 2 (conservative).
+                Set to 0 (or any value <= 0) to disable rate limiting.
             burst: Maximum burst size. Default is 1 (strict spacing).
                 Set to higher values to allow short bursts of requests.
+                Ignored when rate <= 0.
         """
         self.rate = rate
         self.burst = burst
@@ -86,6 +88,9 @@ class RateLimiter:
         Returns:
             True if token was acquired, False if timeout occurred.
         """
+        if self.rate <= 0:
+            return True
+
         start_time = time.monotonic()
         min_interval = 1.0 / self.rate
 
@@ -178,9 +183,10 @@ class NetworkSession:
             base_url: Base URL for the Ops Manager API.
             auth: Authentication handler (typically OpsManagerAuth).
             timeout: Request timeout in seconds.
-            rate_limit: Maximum requests per second.
+            rate_limit: Maximum requests per second. Set to 0 to disable.
             rate_burst: Maximum burst size (default 1 = no bursting).
                 Set to higher values to allow short bursts of requests.
+                Ignored when rate_limit <= 0.
             retry_count: Number of retries for failed requests.
             retry_backoff: Base backoff time between retries.
             verify_ssl: Whether to verify SSL certificates.

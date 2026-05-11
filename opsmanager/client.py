@@ -136,9 +136,12 @@ class OpsManagerClient:
             timeout: Request timeout in seconds (default 30).
             rate_limit: Maximum requests per second (default 2).
                 Set conservatively to protect production Ops Manager.
+                Set to 0 to disable rate limiting entirely (use when the
+                caller is responsible for pacing, e.g. fast triage tooling).
             rate_burst: Maximum burst size (default 1 = no bursting).
                 With burst=1, requests are strictly spaced by rate_limit.
                 Higher values allow short bursts before throttling.
+                Ignored when rate_limit <= 0.
             retry_count: Number of retries for failed requests (default 3).
             retry_backoff: Base backoff time between retries in seconds.
             verify_ssl: Whether to verify SSL certificates (default True).

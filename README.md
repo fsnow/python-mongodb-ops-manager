@@ -210,6 +210,11 @@ Rate limiting is enabled by default at 2 requests per second. With `rate_burst=1
 ```python
 # Increase if your Ops Manager instance can handle it
 client.set_rate_limit(5.0)
+
+# Disable entirely — caller is responsible for pacing (e.g. fast triage tooling)
+client.set_rate_limit(0)
+# or at construction time:
+client = OpsManagerClient(..., rate_limit=0)
 ```
 
 ## Pagination

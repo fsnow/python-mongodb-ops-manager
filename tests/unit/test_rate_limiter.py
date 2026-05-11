@@ -97,3 +97,35 @@ class TestRateLimiterBurstMode:
                 f"Gap between request {i} and {i+1} was {gap*1000:.1f}ms, "
                 f"expected ~50ms (rate=20/s)"
             )
+
+
+class TestRateLimiterDisabled:
+    """rate <= 0 disables rate limiting entirely."""
+
+    def test_rate_zero_returns_immediately(self):
+        limiter = RateLimiter(rate=0, burst=1)
+        for _ in range(100):
+            assert limiter.acquire() is True
+
+    def test_rate_negative_returns_immediately(self):
+        limiter = RateLimiter(rate=-1, burst=1)
+        assert limiter.acquire() is True
+
+    def test_rate_zero_no_waiting(self):
+        limiter = RateLimiter(rate=0)
+        start = time.monotonic()
+        for _ in range(1000):
+            limiter.acquire()
+        elapsed = time.monotonic() - start
+        # 1000 acquires should finish in well under 100ms with no rate limit
+        assert elapsed < 0.1, f"Expected no waiting, took {elapsed:.3f}s"
+
+    def test_set_rate_to_zero_disables(self):
+        limiter = RateLimiter(rate=10.0, burst=1)
+        limiter.acquire()
+        limiter.set_rate(0)
+        # Immediately afterward, acquire should not wait
+        start = time.monotonic()
+        limiter.acquire()
+        elapsed = time.monotonic() - start
+        assert elapsed < 0.01, f"Expected immediate acquire after set_rate(0), waited {elapsed:.3f}s"
