@@ -42,6 +42,7 @@ class ClusterType(str, Enum):
     """Type of MongoDB cluster."""
     REPLICA_SET = "REPLICA_SET"
     SHARDED_REPLICA_SET = "SHARDED_REPLICA_SET"
+    CONFIG_SERVER_REPLICA_SET = "CONFIG_SERVER_REPLICA_SET"
 
 
 class ProcessType(str, Enum):

@@ -269,6 +269,25 @@ class TestClusterUnknownType:
         cluster = Cluster.from_dict(data)
         assert cluster.type_name == ClusterType.SHARDED_REPLICA_SET
 
+    def test_config_server_replica_set_is_distinct(self):
+        """CSRS of a sharded cluster must not collapse into REPLICA_SET.
+
+        Regression: ClusterType was missing CONFIG_SERVER_REPLICA_SET, so
+        _safe_enum() fell back to REPLICA_SET. Callers couldn't distinguish
+        a config-server replica set from a regular one.
+        """
+        from opsmanager.types import Cluster, ClusterType
+        data = {
+            "id": "c1",
+            "typeName": "CONFIG_SERVER_REPLICA_SET",
+            "clusterName": "configRS",
+            "replicaSetName": "configRS",
+            "groupId": "g1",
+        }
+        cluster = Cluster.from_dict(data)
+        assert cluster.type_name == ClusterType.CONFIG_SERVER_REPLICA_SET
+        assert cluster.type_name != ClusterType.REPLICA_SET
+
 
 # ---------------------------------------------------------------------------
 # DEAD-4: PerformanceAdvisorOptions exists but is unused
