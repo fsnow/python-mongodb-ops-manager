@@ -24,6 +24,25 @@ cd python-mongodb-ops-manager
 pip install -e .
 ```
 
+### Single-file bundle (for restricted environments)
+
+If `pip install` is not allowed (e.g. air-gapped environments that only
+accept plain-text source), build a self-contained single-file copy:
+
+```bash
+python scripts/build_bundle.py
+# → dist-bundle/opsmanager_bundle.py
+```
+
+Drop the resulting `opsmanager_bundle.py` into the consuming project
+and import it like the package:
+
+```python
+from opsmanager_bundle import OpsManagerClient
+```
+
+The bundle has the same public API and depends only on `requests`.
+
 ## Quick Start
 
 ```python
