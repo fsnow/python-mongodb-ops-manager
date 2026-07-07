@@ -139,3 +139,4 @@ config.yaml
 output/
 om_config.md
 dist-bundle/
+DEV_PROMPT_HISTORY.md
