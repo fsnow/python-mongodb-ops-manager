@@ -51,6 +51,49 @@ python om_health_summary.py --serve --port 8080 --project <PROJECT_ID> --project
 
 Projects can also be supplied via `OM_PROJECT_IDS=<id>,<id>` instead of `--project`.
 
+### Programmatic use (from another library)
+
+The CLI is a thin wrapper over an importable core, so another Python project can
+call it directly. The module is import-safe — all CLI/server code is guarded
+behind `if __name__ == "__main__"`, so importing it has no side effects (its one
+import-time requirement is that `opsmanager_bundle` is importable).
+
+Two functions are meant for reuse:
+
+- `health_summary(client, project_ids, now=None)` → returns the JSON-serializable
+  summary `dict` (no printing, no `sys.exit`). This is the one to call.
+- `client_from_env()` → convenience `OpsManagerClient` built from the `OM_*`
+  environment variables.
+
+```python
+# Pattern A — caller owns the client (custom rate limit, reuse, callbacks, ...)
+from opsmanager_bundle import OpsManagerClient
+import om_health_summary as oh
+
+client = OpsManagerClient(base_url=..., public_key=..., private_key=...)
+summary = oh.health_summary(client, ["<project-id>", "<project-id>"])
+client.close()
+
+summary["totals"]                 # {'db_clusters': 2, 'replica_sets': 4, 'hosts': 18}
+summary["cluster_health"]         # {'healthy': 2, 'warning': 0, 'degraded': 0}
+summary["clusters"][0]["status"]  # 'HEALTHY'
+
+# Pattern B — env-based convenience builder
+import om_health_summary as oh
+client = oh.client_from_env()     # OM_BASE_URL / OM_PUBLIC_KEY / OM_PRIVATE_KEY
+summary = oh.health_summary(client, ["<project-id>"])
+client.close()
+```
+
+The return value is a plain `dict`, so the caller can index into it, re-serialize
+it, or merge it into a larger response.
+
+Because this is an example file, it isn't on the import path by default. A
+consuming project can either add `examples/` (and the bundle's directory) to
+`PYTHONPATH`, or copy `om_health_summary.py` and `opsmanager_bundle.py` into its
+own package. If it becomes a real dependency rather than a one-off, promote it
+out of `examples/` into an installable module with a proper entry point.
+
 ### Grafana
 
 Point the [Infinity](https://grafana.com/grafana/plugins/yesoreyeram-infinity-datasource/)
