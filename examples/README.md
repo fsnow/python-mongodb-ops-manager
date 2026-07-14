@@ -113,6 +113,16 @@ call rate regardless.
   "cluster_health": { "healthy": 2, "warning": 0, "degraded": 0 },
   "clusters": [
     {
+      "project_id": "<rs-project>",
+      "name": "example-replica-set",
+      "type": "REPLICA_SET",
+      "status": "HEALTHY",
+      "nodes_total": 3, "nodes_up": 3, "nodes_down": 0,
+      "replica_sets": [
+        { "name": "example-replica-set", "type": "REPLICA_SET", "members_total": 3, "members_up": 3, "members_down": 0, "has_quorum": true, "down_members": [] }
+      ]
+    },
+    {
       "project_id": "<sharded-project>",
       "name": "example-sharded-cluster",
       "type": "SHARDED_REPLICA_SET",
