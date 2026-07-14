@@ -26,7 +26,8 @@ the fleet-level metrics a dashboard needs:
    `PYTHONPATH=dist-bundle python examples/om_health_summary.py ...`)
 
 2. Provide credentials via environment variables — **never hard-code them**.
-   A read-only key is sufficient:
+   A read-only key works, but it must also have **automation read** access
+   (quorum is derived from the automation config — see "Voting membership"):
 
    ```bash
    export OM_BASE_URL="http://ops-manager.example.com:8081"
@@ -110,7 +111,7 @@ call rate regardless.
   "generated_at": "2026-07-14T18:37:39Z",
   "project_ids": ["<rs-project>", "<sharded-project>"],
   "totals": { "db_clusters": 2, "replica_sets": 4, "hosts": 18 },
-  "cluster_health": { "healthy": 2, "warning": 0, "degraded": 0 },
+  "cluster_health": { "healthy": 2, "warning": 0, "degraded": 0, "unknown": 0 },
   "clusters": [
     {
       "project_id": "<rs-project>",
@@ -119,7 +120,7 @@ call rate regardless.
       "status": "HEALTHY",
       "nodes_total": 3, "nodes_up": 3, "nodes_down": 0,
       "replica_sets": [
-        { "name": "example-replica-set", "type": "REPLICA_SET", "members_total": 3, "members_up": 3, "members_down": 0, "has_quorum": true, "down_members": [] }
+        { "name": "example-replica-set", "type": "REPLICA_SET", "members_total": 3, "members_up": 3, "members_down": 0, "voting_total": 3, "voting_up": 3, "has_quorum": true, "down_members": [] }
       ]
     },
     {
@@ -129,14 +130,19 @@ call rate regardless.
       "status": "HEALTHY",
       "nodes_total": 9, "nodes_up": 9, "nodes_down": 0,
       "replica_sets": [
-        { "name": "shard0",  "type": "REPLICA_SET",                "members_total": 3, "members_up": 3, "members_down": 0, "has_quorum": true, "down_members": [] },
-        { "name": "shard1",  "type": "REPLICA_SET",                "members_total": 3, "members_up": 3, "members_down": 0, "has_quorum": true, "down_members": [] },
-        { "name": "configRS","type": "CONFIG_SERVER_REPLICA_SET",  "members_total": 3, "members_up": 3, "members_down": 0, "has_quorum": true, "down_members": [] }
+        { "name": "shard0",  "type": "REPLICA_SET",                "members_total": 3, "members_up": 3, "members_down": 0, "voting_total": 3, "voting_up": 3, "has_quorum": true, "down_members": [] },
+        { "name": "shard1",  "type": "REPLICA_SET",                "members_total": 3, "members_up": 3, "members_down": 0, "voting_total": 3, "voting_up": 3, "has_quorum": true, "down_members": [] },
+        { "name": "configRS","type": "CONFIG_SERVER_REPLICA_SET",  "members_total": 3, "members_up": 3, "members_down": 0, "voting_total": 3, "voting_up": 3, "has_quorum": true, "down_members": [] }
       ]
     }
   ]
 }
 ```
+
+`members_*` count all replica-set members; `voting_*` count only voting members
+(`votes >= 1`), which are what `has_quorum` is computed from. When vote data is
+unavailable, `voting_total` / `voting_up` / `has_quorum` are `null` and the
+cluster's `status` is `"UNKNOWN"`.
 
 ### How the metrics are defined
 
@@ -151,17 +157,41 @@ All of them are **tunable constants at the top of the script**.
 | **Replica Sets** | rows with typeName `REPLICA_SET` or `CONFIG_SERVER_REPLICA_SET` (`COUNT_CONFIG_SERVERS_AS_REPLICA_SETS`) |
 | **Hosts** | monitored processes; mongos included by default (`COUNT_MONGOS_AS_HOSTS`), deactivated hosts excluded |
 
-**Cluster health** is assessed per replica set, by quorum:
+**Cluster health** is assessed per replica set, by quorum. Quorum — "does the
+cluster remain operational" — is decided over **voting members only**
+(`votes >= 1`):
 
-- **Healthy** — every replica set has all members up.
-- **Warning** — one or more members down, but every replica set retains majority
+- **Healthy** — every replica set has all its voting members up.
+- **Warning** — a voting member is down, but every replica set retains majority
   (the cluster is still operational).
-- **Degraded** — a replica set has lost majority (quorum), impacting the cluster.
+- **Degraded** — a replica set has lost voting majority (quorum), impacting the
+  cluster.
+- **Unknown** — vote data for a cluster couldn't be determined; the tool reports
+  `UNKNOWN` rather than guess a quorum verdict.
 
 A node counts as *up* when its `replicaStateName` is one of `UP_STATES`
 (`PRIMARY`, `SECONDARY`, `ARBITER`) **and** its `lastPing` is newer than
 `STALE_PING_SECONDS`. Tune these to match how quickly your Ops Manager surfaces
 an outage.
+
+#### Voting membership and why it matters
+
+The Hosts API doesn't expose vote configuration, so voting membership is read
+from the **automation config** (`replicaSets[].members[].votes`). This matters
+for any cluster with non-voting members — for example, hidden non-voting
+secondaries added ahead of a data-center migration. Counting those toward quorum
+would misjudge whether the cluster is actually operational (e.g. call a
+quorum-lost cluster merely "warning"). They are reported in `members_*` and in
+`down_members`, but never counted in `voting_*` / `has_quorum`.
+
+By default a non-voting member being down does **not** raise a cluster to
+`WARNING` — so a migration node still doing initial sync doesn't create noise.
+Set `WARN_ON_NONVOTING_DOWN = True` to flag any down member regardless of votes.
+
+> **Permission requirement:** because quorum depends on the automation config,
+> the API key must have **automation read** access in addition to cluster/host
+> read. If that call fails, the tool errors out rather than emit an unreliable
+> quorum verdict.
 
 ### Known limitation
 

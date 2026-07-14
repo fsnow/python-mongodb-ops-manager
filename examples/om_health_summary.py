@@ -10,10 +10,11 @@ with the fleet-level metrics a dashboard needs:
         replica_sets   - number of replica sets (shards + config servers count)
         hosts          - number of monitored processes (mongod + mongos)
 
-    cluster_health:
-        healthy        - every replica set fully up
-        warning        - some members down, but every replica set keeps quorum
-        degraded       - a replica set has lost quorum (majority unreachable)
+    cluster_health (quorum is assessed over VOTING members only):
+        healthy        - every replica set's voting members are all up
+        warning        - a voting member is down, but every RS keeps quorum
+        degraded       - a replica set has lost quorum (voting majority down)
+        unknown        - vote data unavailable for a cluster (never guessed)
 
     clusters[]         - per-cluster drill-down for a Grafana table panel
 
@@ -88,6 +89,14 @@ COUNT_CONFIG_SERVERS_AS_REPLICA_SETS = True
 # but carry no data; set False to count only mongod processes.
 COUNT_MONGOS_AS_HOSTS = True
 
+# Quorum ("does the cluster remain operational") is assessed over VOTING members
+# only (votes >= 1), read from the automation config. Hidden / non-voting
+# secondaries — e.g. nodes added during a data-center migration — are reported
+# but never counted toward quorum. By default a non-voting member being down does
+# NOT raise a cluster to WARNING (so in-flight migrations don't create noise);
+# set True to flag any down member, voting or not.
+WARN_ON_NONVOTING_DOWN = False
+
 # HTTP server response cache (see --serve). Protects Ops Manager from frequent
 # Grafana scrapes. Set to 0 to disable caching.
 CACHE_TTL_SECONDS = 30
@@ -139,9 +148,135 @@ def _node_is_up(host: Dict[str, Any], now: datetime) -> bool:
     return True
 
 
-def _quorum_size(member_count: int) -> int:
-    """Voting majority for a replica set of the given size."""
-    return member_count // 2 + 1
+def _quorum_size(voting_member_count: int) -> int:
+    """Voting majority for a replica set with the given number of VOTING members."""
+    return voting_member_count // 2 + 1
+
+
+# Status precedence for rolling replica-set verdicts up to a cluster:
+# a known-bad shard outranks an unknown one, which outranks a warning.
+_STATUS_RANK = {"HEALTHY": 0, "WARNING": 1, "UNKNOWN": 2, "DEGRADED": 3}
+
+
+def _escalate(current: str, new: str) -> str:
+    """Return the more severe of two statuses (DEGRADED > UNKNOWN > WARNING > HEALTHY)."""
+    return new if _STATUS_RANK[new] > _STATUS_RANK[current] else current
+
+
+# =============================================================================
+# Voting membership (quorum basis) — from the automation config
+# =============================================================================
+
+def _process_port(process: Dict[str, Any]) -> Optional[int]:
+    """Extract the listen port from an automation-config process document."""
+    args26 = process.get("args2_6") or {}
+    net = args26.get("net") or {}
+    if net.get("port"):
+        return net["port"]
+    args24 = process.get("args2_4") or {}          # legacy 2.4-style args
+    if args24.get("port"):
+        return args24["port"]
+    return None
+
+
+def _voting_map_from_config(config: Dict[str, Any]) -> Dict[str, set]:
+    """Map replica-set name -> set of 'hostname:port' for its VOTING members.
+
+    The Hosts API does not expose vote configuration, so the automation config is
+    the source of truth for whether a member counts toward quorum. Members are
+    referenced there by process name, which we resolve to hostname:port via the
+    config's `processes` list.
+    """
+    proc_to_hostport: Dict[str, str] = {}
+    for p in config.get("processes", []):
+        name = p.get("name")
+        hostname = p.get("hostname")
+        port = _process_port(p)
+        if name and hostname and port:
+            proc_to_hostport[name] = f"{hostname}:{port}"
+
+    voting: Dict[str, set] = {}
+    for rs in config.get("replicaSets", []):
+        rs_name = rs.get("_id")
+        if rs_name is None:
+            continue
+        members = set()
+        for m in rs.get("members", []):
+            hostport = proc_to_hostport.get(m.get("host"))
+            if hostport and (m.get("votes", 1) or 0) >= 1:
+                members.add(hostport)
+        voting[rs_name] = members
+    return voting
+
+
+def _load_voting_map(client: OpsManagerClient, project_id: str) -> Dict[str, set]:
+    """Fetch the automation config and derive voting membership.
+
+    Quorum is a hard requirement, so a failure to read the config is fatal (we
+    refuse to guess). A read-only key must also carry automation read access.
+    """
+    try:
+        config = client.automation.get_config(project_id=project_id)
+    except Exception as exc:  # noqa: BLE001 — surface any failure with guidance
+        raise RuntimeError(
+            f"Cannot read the automation config for project {project_id}, which is "
+            "required to determine replica-set voting membership (quorum). Ensure "
+            f"the API key has automation read access. Underlying error: {exc}"
+        ) from exc
+    return _voting_map_from_config(config)
+
+
+def _assess_replica_set(
+    rs_name: str,
+    rs_type: str,
+    members: List[Dict[str, Any]],
+    up: List[Dict[str, Any]],
+    down: List[Dict[str, Any]],
+    voting_map: Dict[str, set],
+) -> Dict[str, Any]:
+    """Assess one replica set's quorum/health using VOTING members only.
+
+    Returns the per-RS summary dict; the private "_status" key is popped by the
+    caller to escalate the parent cluster's status.
+    """
+    voting_set = voting_map.get(rs_name)
+
+    if voting_set is None:
+        # No vote data for this replica set. Quorum is a hard requirement, so we
+        # report UNKNOWN rather than a possibly-wrong verdict.
+        status, has_quorum, voting_total, voting_up = "UNKNOWN", None, None, None
+    else:
+        voting_members = [
+            m for m in members
+            if f"{m.get('hostname')}:{m.get('port')}" in voting_set
+        ]
+        voting_up = sum(1 for m in voting_members if m in up)
+        voting_total = len(voting_members)
+        if voting_total == 0:
+            status, has_quorum = "UNKNOWN", None
+        else:
+            has_quorum = voting_up >= _quorum_size(voting_total)
+            if not has_quorum:
+                status = "DEGRADED"                # voting majority lost
+            elif voting_up < voting_total:
+                status = "WARNING"                 # a voting member is down
+            elif WARN_ON_NONVOTING_DOWN and down:
+                status = "WARNING"                 # a non-voting member is down
+            else:
+                status = "HEALTHY"
+
+    return {
+        "name": rs_name,
+        "type": rs_type,
+        "members_total": len(members),
+        "members_up": len(up),
+        "members_down": len(down),
+        "voting_total": voting_total,
+        "voting_up": voting_up,
+        "has_quorum": has_quorum,
+        "down_members": [f"{m.get('hostname')}:{m.get('port')}" for m in down],
+        "_status": status,
+    }
 
 
 # =============================================================================
@@ -172,6 +307,11 @@ def _summarize_project(
     clusters = client.clusters.list(project_id=project_id, as_obj=False)
     hosts = client.deployments.list_hosts(project_id=project_id, as_obj=False)
 
+    # Voting membership (votes>=1) is the authoritative basis for quorum, and
+    # only the automation config exposes it. Required — a failure to read it is
+    # fatal rather than silently guessed (see _load_voting_map).
+    voting_map = _load_voting_map(client, project_id)
+
     active_hosts = [h for h in hosts if _is_active(h)]
 
     # Map cluster_id -> list of member hosts (mongod). mongos have clusterId=None.
@@ -196,31 +336,19 @@ def _summarize_project(
         nodes_total = nodes_up = 0
 
         for rs in rs_entries:
+            rs_name = rs.get("replicaSetName") or rs.get("shardName") or name
             members = hosts_by_cluster_id.get(rs.get("id"), [])
             up = [m for m in members if _node_is_up(m, now)]
             down = [m for m in members if m not in up]
-            total = len(members)
-            has_quorum = len(up) >= _quorum_size(total) if total else True
 
-            nodes_total += total
+            nodes_total += len(members)
             nodes_up += len(up)
 
-            # Escalate cluster status: any RS that lost quorum -> DEGRADED;
-            # otherwise any down member -> at least WARNING.
-            if not has_quorum:
-                cluster_status = "DEGRADED"
-            elif down and cluster_status == "HEALTHY":
-                cluster_status = "WARNING"
-
-            rs_summaries.append({
-                "name": rs.get("replicaSetName") or rs.get("shardName") or name,
-                "type": rs.get("typeName"),
-                "members_total": total,
-                "members_up": len(up),
-                "members_down": len(down),
-                "has_quorum": has_quorum,
-                "down_members": [f"{m.get('hostname')}:{m.get('port')}" for m in down],
-            })
+            rs_summary = _assess_replica_set(
+                rs_name, rs.get("typeName"), members, up, down, voting_map
+            )
+            cluster_status = _escalate(cluster_status, rs_summary.pop("_status"))
+            rs_summaries.append(rs_summary)
 
         cluster_summaries.append({
             "project_id": project_id,
@@ -277,7 +405,7 @@ def health_summary(
         totals["replica_sets"] += proj["replica_set_count"]
         totals["hosts"] += proj["host_count"]
 
-    health = {"healthy": 0, "warning": 0, "degraded": 0}
+    health = {"healthy": 0, "warning": 0, "degraded": 0, "unknown": 0}
     for c in all_clusters:
         health[c["status"].lower()] += 1
 
@@ -336,16 +464,20 @@ def _print_pretty(summary: Dict[str, Any]) -> None:
     print(f"  Replica sets: {t['replica_sets']}")
     print(f"  Hosts       : {t['hosts']}")
     print(f"  Health      : {h['healthy']} healthy / {h['warning']} warning / "
-          f"{h['degraded']} degraded")
+          f"{h['degraded']} degraded / {h['unknown']} unknown")
     print("-" * 60)
     for c in summary["clusters"]:
         print(f"  [{c['status']:>8}] {c['name']}  ({c['type']}, "
               f"{c['nodes_up']}/{c['nodes_total']} nodes up)")
         for rs in c["replica_sets"]:
-            flag = "" if rs["has_quorum"] else "  !! NO QUORUM"
+            if rs["has_quorum"] is None:
+                flag, votes = "  (quorum unknown — no vote data)", "voting: n/a"
+            else:
+                flag = "" if rs["has_quorum"] else "  !! QUORUM LOST"
+                votes = f"{rs['voting_up']}/{rs['voting_total']} voting up"
             down = f"  down: {', '.join(rs['down_members'])}" if rs["down_members"] else ""
             print(f"        - {rs['name']} ({rs['type']}): "
-                  f"{rs['members_up']}/{rs['members_total']} up{down}{flag}")
+                  f"{rs['members_up']}/{rs['members_total']} up, {votes}{down}{flag}")
 
 
 # =============================================================================
