@@ -4,6 +4,31 @@ Standalone consumers built on top of the `opsmanager` library. Each is meant to
 be copied out and run on its own, so they depend on the single-file bundle
 (`opsmanager_bundle.py`) rather than a `pip install`.
 
+| Script | Purpose | Permissions needed |
+|--------|---------|--------------------|
+| **`om_health_summary_readonly.py`** | Health summary for Grafana — **start here** | read-only (Project/Org Read Only) |
+| `om_health_summary.py` | Same, but derives quorum from vote configuration | **automation read** (`GROUP_AUTOMATION_ADMIN`) |
+| `om_check_permissions.py` | Does a given API key have what the summary needs? | any key (it's a probe) |
+
+## Which health summary should I use?
+
+Both emit the same JSON. They differ only in how they decide whether a cluster
+**remains operational** (the `warning` vs `degraded` line):
+
+- **`om_health_summary_readonly.py` — recommended.** Observes operability
+  directly: *a replica set has an elected PRIMARY if and only if it has quorum.*
+  `replicaStateName` is in the Hosts API, so this needs **no special
+  permissions**. It is also immune to non-voting members — hidden non-voting
+  secondaries cannot affect whether a primary exists.
+- **`om_health_summary.py`** — infers quorum by counting **voting** members
+  (`votes >= 1`) from the automation config. Equally correct, but the automation
+  config is readable only by `GROUP_AUTOMATION_ADMIN` or `GROUP_OWNER` — roles
+  that can also **rewrite** the automation config (i.e. reconfigure or destroy
+  clusters). Ops Manager has no read-only automation role. Granting that to a
+  dashboard key is usually not acceptable; prefer the read-only version.
+
+Use `om_check_permissions.py` to find out which one a given key can run.
+
 ## om_health_summary.py — consolidated health summary for Grafana
 
 Given one or more Ops Manager project IDs, produces a single JSON document with
@@ -199,3 +224,102 @@ Set `WARN_ON_NONVOTING_DOWN = True` to flag any down member regardless of votes.
 specific cluster and are excluded from per-cluster health scoring (they still
 count toward the host total). Health scoring is based on mongod replica-set
 members.
+
+---
+
+## om_health_summary_readonly.py — same summary, read-only permissions
+
+Identical output and CLI to `om_health_summary.py` (`--pretty`, `--serve`,
+`health_summary()` for programmatic use), but it never calls the automation
+config, so an ordinary read-only key works.
+
+### How operability is determined
+
+> A replica set has an elected **PRIMARY if and only if it has quorum.**
+
+MongoDB guarantees this: a primary that cannot reach a majority of voting
+members steps down within `electionTimeoutMillis` (~10s). So rather than
+*infer* quorum by counting votes (which needs the automation config), this
+version *observes* it via `replicaStateName` from the Hosts API:
+
+| Status | Rule |
+|--------|------|
+| **Healthy** | replica set has a PRIMARY and all members are up |
+| **Warning** | replica set has a PRIMARY (still operational) but a member is down |
+| **Degraded** | replica set has **no PRIMARY** — quorum lost, not operational |
+| **Unknown** | replica set has no monitored members (cannot assess) |
+
+A PRIMARY is only trusted if it is itself reachable (`lastPing` fresh), so a
+stale reading can't imply operability. Per-RS output carries `has_primary` and
+`primary` (the `hostname:port`) instead of `has_quorum` / `voting_*`.
+
+**Immune to non-voting members.** Hidden non-voting secondaries — e.g. nodes
+added ahead of a data-center migration — cannot affect whether a primary exists.
+A replica set with 3 voters (2 down) plus 2 healthy hidden members reports
+`DEGRADED` even though 3 of 5 members are up, with no vote data required.
+
+**Trade-off.** During a brief election (~10s) there is genuinely no primary, so
+a scrape landing in that window reports `DEGRADED`. That is accurate at that
+instant (no writes are possible) but can look like a blip on a dashboard.
+
+**Migration noise.** Without vote data, a down *hidden* member can't be
+distinguished from a down voter, so a hidden node doing initial sync reports
+`WARNING`. Set `IGNORE_HIDDEN_MEMBERS_FOR_WARNING = True` to suppress that. This
+is a heuristic (`hidden` does not strictly imply non-voting) but a safe one: it
+only ever affects `HEALTHY` vs `WARNING` and can **never** change the `DEGRADED`
+verdict, which depends solely on PRIMARY presence.
+
+---
+
+## om_check_permissions.py — what can this API key actually do?
+
+A minimal probe (plain `requests` + digest auth, no client library) that
+separates the three failure modes that all look alike: **TLS/CA trust**,
+**authentication**, and **authorization**.
+
+```bash
+export OM_BASE_URL="https://ops-manager.example.com"
+export OM_PUBLIC_KEY="..." ; export OM_PRIVATE_KEY="..."
+python om_check_permissions.py --project <PROJECT_ID>
+
+# TLS options — prefer trusting the CA over disabling verification:
+python om_check_permissions.py --project <ID> --use-os-truststore  # pip install truststore
+python om_check_permissions.py --project <ID> --ca-bundle /path/ca.pem
+python om_check_permissions.py --project <ID> --insecure           # triage only
+```
+
+It checks `clusters` and `hosts` (which the summary needs, and which act as
+controls) plus `automationConfig` (the call that requires elevated permission).
+If the controls succeed over the same connection and only `automationConfig` is
+refused with `USER_UNAUTHORIZED`, the cause is the key's role — not
+certificates, connectivity, or the library.
+
+Exit codes: `0` key is sufficient for either version, `1` key can't read the
+automation config (use `om_health_summary_readonly.py`), `2` inconclusive
+(TLS/network).
+
+### Role matrix (verified against Ops Manager)
+
+| Role | clusters / hosts | automationConfig |
+|------|------------------|------------------|
+| `ORG_READ_ONLY` | OK | DENIED |
+| `GROUP_READ_ONLY` | OK | DENIED |
+| `GROUP_DATA_ACCESS_READ_ONLY` | OK | DENIED |
+| `GROUP_READ_ONLY` + `GROUP_BACKUP_ADMIN` | OK | DENIED |
+| `GROUP_MONITORING_ADMIN` | OK | DENIED |
+| `GROUP_AUTOMATION_ADMIN` | OK | **ALLOWED** (least privilege) |
+| `GROUP_OWNER` | OK | ALLOWED (broader) |
+
+Every role that can *read* the automation config can also *write* it — there is
+no read-only automation role. That is the reason `om_health_summary_readonly.py`
+exists and is the default recommendation.
+
+### TLS note
+
+A corporate CA certificate is **public** information — you do not need the Ops
+Manager server's private key or access to its hosts to verify its certificate.
+On a domain-joined Windows machine the corporate root is usually already in the
+Windows trust store; Python just doesn't look there by default. `pip install
+truststore` and `truststore.inject_into_ssl()` fixes it with no PEM file.
+Otherwise export the CA chain and point `REQUESTS_CA_BUNDLE` at it. Don't
+disable verification.
