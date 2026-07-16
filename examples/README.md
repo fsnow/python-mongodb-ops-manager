@@ -36,7 +36,9 @@ the fleet-level metrics a dashboard needs:
 
 - **totals** — `db_clusters`, `replica_sets`, `hosts`
 - **cluster_health** — counts of `healthy` / `warning` / `degraded` clusters
-- **clusters[]** — per-cluster drill-down for a table panel
+- **projects[]** — `{id, name}` for each project queried
+- **clusters[]** — per-cluster drill-down for a table panel, each carrying
+  `project_id` / `project_name` and the cluster `name`
 
 ### Setup
 
@@ -135,11 +137,16 @@ call rate regardless.
 {
   "generated_at": "2026-07-14T18:37:39Z",
   "project_ids": ["<rs-project>", "<sharded-project>"],
+  "projects": [
+    { "id": "<rs-project>", "name": "Example Project" },
+    { "id": "<sharded-project>", "name": "Example Sharded Project" }
+  ],
   "totals": { "db_clusters": 2, "replica_sets": 4, "hosts": 18 },
   "cluster_health": { "healthy": 2, "warning": 0, "degraded": 0, "unknown": 0 },
   "clusters": [
     {
       "project_id": "<rs-project>",
+      "project_name": "Example Project",
       "name": "example-replica-set",
       "type": "REPLICA_SET",
       "status": "HEALTHY",
@@ -150,6 +157,7 @@ call rate regardless.
     },
     {
       "project_id": "<sharded-project>",
+      "project_name": "Example Sharded Project",
       "name": "example-sharded-cluster",
       "type": "SHARDED_REPLICA_SET",
       "status": "HEALTHY",

@@ -16,7 +16,10 @@ with the fleet-level metrics a dashboard needs:
         degraded       - a replica set has lost quorum (voting majority down)
         unknown        - vote data unavailable for a cluster (never guessed)
 
-    clusters[]         - per-cluster drill-down for a Grafana table panel
+    projects[]         - {id, name} for each project queried
+    clusters[]         - per-cluster drill-down for a Grafana table panel, each
+                         carrying project_id / project_name and the cluster
+                         `name`, so panels can label rows without a second lookup
 
 It is built on the `opsmanager` client library, distributed here as the
 single-file bundle `opsmanager_bundle.py`. Drop that file next to this one.
@@ -302,6 +305,7 @@ def _summarize_project(
     now: datetime,
 ) -> Dict[str, Any]:
     """Compute clusters + host inventory for a single project."""
+    project_name = client.projects.get(project_id=project_id).name
     # Raw dicts: we need fields (parent hierarchy, ids) the dataclass drops,
     # and want to be robust to unknown typeName values.
     clusters = client.clusters.list(project_id=project_id, as_obj=False)
@@ -352,6 +356,7 @@ def _summarize_project(
 
         cluster_summaries.append({
             "project_id": project_id,
+            "project_name": project_name,
             "name": name,
             "type": _TYPE_SHARDED if is_sharded else _TYPE_REPLICA_SET,
             "status": cluster_status,
@@ -378,6 +383,7 @@ def _summarize_project(
 
     return {
         "clusters": cluster_summaries,
+        "project_name": project_name,
         "db_cluster_count": len(groups),
         "replica_set_count": rs_total,
         "host_count": host_count,
@@ -396,11 +402,13 @@ def health_summary(
     now = now or datetime.now(timezone.utc)
 
     all_clusters: List[Dict[str, Any]] = []
+    projects: List[Dict[str, Any]] = []
     totals = {"db_clusters": 0, "replica_sets": 0, "hosts": 0}
 
     for pid in project_ids:
         proj = _summarize_project(client, pid, now)
         all_clusters.extend(proj["clusters"])
+        projects.append({"id": pid, "name": proj["project_name"]})
         totals["db_clusters"] += proj["db_cluster_count"]
         totals["replica_sets"] += proj["replica_set_count"]
         totals["hosts"] += proj["host_count"]
@@ -412,6 +420,7 @@ def health_summary(
     return {
         "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "project_ids": list(project_ids),
+        "projects": projects,
         "totals": totals,
         "cluster_health": health,
         "clusters": all_clusters,
@@ -467,7 +476,7 @@ def _print_pretty(summary: Dict[str, Any]) -> None:
           f"{h['degraded']} degraded / {h['unknown']} unknown")
     print("-" * 60)
     for c in summary["clusters"]:
-        print(f"  [{c['status']:>8}] {c['name']}  ({c['type']}, "
+        print(f"  [{c['status']:>8}] {c['project_name']} / {c['name']}  ({c['type']}, "
               f"{c['nodes_up']}/{c['nodes_total']} nodes up)")
         for rs in c["replica_sets"]:
             if rs["has_quorum"] is None:
