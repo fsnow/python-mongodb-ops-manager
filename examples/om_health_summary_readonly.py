@@ -56,9 +56,10 @@ USAGE  (identical to om_health_summary.py)
     export OM_PUBLIC_KEY="..."
     export OM_PRIVATE_KEY="..."
 
-    python om_health_summary_readonly.py --project <ID> --project <ID>
-    python om_health_summary_readonly.py --project <ID> --pretty
-    python om_health_summary_readonly.py --serve --port 8080 --project <ID>
+    # --project accepts a project ID *or* a project name
+    python om_health_summary_readonly.py --project <ID-or-NAME> --project <ID-or-NAME>
+    python om_health_summary_readonly.py --project "My Project" --pretty
+    python om_health_summary_readonly.py --serve --port 8080 --project <ID-or-NAME>
         # GET /health  ->  the JSON summary
 
 Verify a key first with:  python om_check_permissions.py --project <ID>
@@ -69,9 +70,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 try:
     from opsmanager_bundle import OpsManagerClient
@@ -236,13 +238,37 @@ def _assess_replica_set(
 # Core: build the consolidated summary
 # =============================================================================
 
+_OBJECT_ID_RE = re.compile(r"^[0-9a-f]{24}$", re.IGNORECASE)
+
+
+def _resolve_project(client: OpsManagerClient, reference: str) -> Tuple[str, str]:
+    """Resolve a project reference to (id, name).
+
+    Accepts EITHER a 24-character project ID or a project name, so callers can
+    use whichever they have to hand. Passing a name where Ops Manager wants an
+    ID otherwise fails with a confusing "INVALID_GROUP_ID" error.
+    """
+    ref = reference.strip()
+    try:
+        if _OBJECT_ID_RE.match(ref):
+            project = client.projects.get(project_id=ref)
+        else:
+            project = client.projects.get_by_name(project_name=ref)
+    except Exception as exc:  # noqa: BLE001 — re-raise with actionable guidance
+        raise RuntimeError(
+            f"Could not resolve project {ref!r}: {exc}. Pass either the "
+            "24-character project ID or the exact project name."
+        ) from exc
+    return project.id, project.name
+
+
 def _summarize_project(
     client: OpsManagerClient,
     project_id: str,
+    project_name: str,
     now: datetime,
 ) -> Dict[str, Any]:
     """Compute clusters + host inventory for a single project (read-only calls)."""
-    project_name = client.projects.get(project_id=project_id).name
     clusters = client.clusters.list(project_id=project_id, as_obj=False)
     hosts = client.deployments.list_hosts(project_id=project_id, as_obj=False)
 
@@ -306,7 +332,6 @@ def _summarize_project(
 
     return {
         "clusters": cluster_summaries,
-        "project_name": project_name,
         "db_cluster_count": len(groups),
         "replica_set_count": rs_total,
         "host_count": host_count,
@@ -320,19 +345,23 @@ def health_summary(
 ) -> Dict[str, Any]:
     """Build the consolidated health summary across the given projects.
 
+    Each entry in `project_ids` may be a project ID *or* a project name.
     Returns a JSON-serializable dict (see module docstring for the shape).
-    Uses only read-only endpoints: /clusters and /hosts.
+    Uses only read-only endpoints.
     """
     now = now or datetime.now(timezone.utc)
 
     all_clusters: List[Dict[str, Any]] = []
     projects: List[Dict[str, Any]] = []
+    resolved_ids: List[str] = []
     totals = {"db_clusters": 0, "replica_sets": 0, "hosts": 0}
 
-    for pid in project_ids:
-        proj = _summarize_project(client, pid, now)
+    for reference in project_ids:
+        pid, pname = _resolve_project(client, reference)
+        proj = _summarize_project(client, pid, pname, now)
         all_clusters.extend(proj["clusters"])
-        projects.append({"id": pid, "name": proj["project_name"]})
+        projects.append({"id": pid, "name": pname})
+        resolved_ids.append(pid)
         totals["db_clusters"] += proj["db_cluster_count"]
         totals["replica_sets"] += proj["replica_set_count"]
         totals["hosts"] += proj["host_count"]
@@ -343,7 +372,7 @@ def health_summary(
 
     return {
         "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "project_ids": list(project_ids),
+        "project_ids": resolved_ids,          # always IDs, even if names were given
         "projects": projects,
         "totals": totals,
         "cluster_health": health,
@@ -378,8 +407,8 @@ def _projects_from_args(cli_projects: List[str]) -> List[str]:
     ids = [p.strip() for p in env.split(",") if p.strip()]
     if not ids:
         raise SystemExit(
-            "No projects given. Use --project <id> (repeatable) "
-            "or set OM_PROJECT_IDS=<id>,<id>."
+            "No projects given. Use --project <id-or-name> (repeatable) "
+            "or set OM_PROJECT_IDS=<id-or-name>,<id-or-name>."
         )
     return ids
 
@@ -484,8 +513,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         description="Ops Manager health summary using read-only permissions."
     )
     parser.add_argument(
-        "--project", action="append", default=[], metavar="PROJECT_ID",
-        help="Ops Manager project ID (repeatable). Defaults to OM_PROJECT_IDS.",
+        "--project", action="append", default=[], metavar="PROJECT",
+        help="Ops Manager project ID or project name (repeatable). "
+             "Defaults to OM_PROJECT_IDS.",
     )
     parser.add_argument("--pretty", action="store_true",
                         help="Human-readable table instead of JSON.")

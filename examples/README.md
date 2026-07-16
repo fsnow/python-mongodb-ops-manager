@@ -77,7 +77,20 @@ python om_health_summary.py --serve --port 8080 --project <PROJECT_ID> --project
 #   GET http://localhost:8080/health?projects=<id>,<id>  -> override projects per-request
 ```
 
-Projects can also be supplied via `OM_PROJECT_IDS=<id>,<id>` instead of `--project`.
+`--project` accepts a **project name or a project ID**, so you can use whichever
+you have to hand:
+
+```bash
+python om_health_summary.py --project "My Project" --project 5f1a...c3
+```
+
+Names are resolved via `GET /groups/byName/{name}` (readable by a read-only key);
+IDs are detected by their 24-hex-character form. `project_ids` in the output is
+always resolved to real IDs. Passing a name where Ops Manager wants an ID would
+otherwise fail with a confusing `INVALID_GROUP_ID`.
+
+Projects can also be supplied via `OM_PROJECT_IDS=<id-or-name>,<id-or-name>`
+instead of `--project`.
 
 ### Programmatic use (from another library)
 
